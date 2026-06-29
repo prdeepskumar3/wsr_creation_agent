@@ -273,6 +273,28 @@ class WsrDraftResponseDTO(ApiDTO):
     )
 
 
+class FieldValidationErrorDTO(ApiDTO):
+    """Field-level validation issue returned for WSR draft data."""
+
+    field: str = Field(..., description="CamelCase field path that failed validation.")
+    code: str = Field(..., description="Stable validation error code.")
+    message: str = Field(..., description="PM-friendly validation message.")
+
+
+class WsrDraftValidationResponseDTO(ApiDTO):
+    """Validation result for PM-entered WSR draft data."""
+
+    is_valid: bool = Field(..., description="Whether draft data can proceed to generation.")
+    calculated_metrics: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Backend recalculated metrics used during validation.",
+    )
+    errors: list[FieldValidationErrorDTO] = Field(
+        default_factory=list,
+        description="Field-level validation errors.",
+    )
+
+
 class ReadyToShareReportMetadataDTO(ApiDTO):
     """Header metadata displayed in the customer-ready WSR."""
 
