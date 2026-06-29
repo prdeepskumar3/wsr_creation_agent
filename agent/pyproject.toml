@@ -1,0 +1,22 @@
+[project]
+name = "wsr-agent"
+version = "0.1.0"
+description = "LangChain and LangGraph agent layer for WSR Creation Agent."
+requires-python = ">=3.12"
+dependencies = [
+  "langchain>=1.0.0",
+  "langgraph>=1.0.0",
+  "pydantic>=2.11.0",
+  "wsr-shared",
+]
+
+[tool.uv.sources]
+wsr-shared = { workspace = true }
+
+[build-system]
+requires = ["setuptools>=80.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

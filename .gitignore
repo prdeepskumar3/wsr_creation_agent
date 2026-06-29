@@ -1,0 +1,32 @@
+# Python
+.venv/
+.uv-cache/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/tsconfig.tsbuildinfo
+
+# Environment and local tooling
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# Local agent skill installs
+.agent/
+.agents/
+.codex/
+_bmad/

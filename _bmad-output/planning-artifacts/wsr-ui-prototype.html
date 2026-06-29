@@ -1,0 +1,1836 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WSR Agent - Weekly Status Report Prototype</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --surface: #ffffff;
+      --surface-soft: #fafbfc;
+      --border: #dde1e6;
+      --border-strong: #c7cdd5;
+      --text: #111827;
+      --muted: #6b7280;
+      --blue: #1f6fd1;
+      --blue-soft: #edf5ff;
+      --green: #3f8f24;
+      --green-soft: #f0f8e9;
+      --amber: #a05a00;
+      --amber-soft: #fff6e6;
+      --red: #b42318;
+      --red-soft: #fff1f1;
+      --shadow: 0 1px 2px rgba(17, 24, 39, 0.06), 0 8px 24px rgba(17, 24, 39, 0.04);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      max-width: 1040px;
+      margin: 0 auto;
+      background: var(--bg);
+      min-height: 100vh;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .crumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      flex: 1;
+      font-size: 15px;
+    }
+
+    .crumb-muted {
+      color: var(--muted);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .chip,
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-strong);
+      background: var(--surface);
+      color: var(--text);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .chip.draft {
+      background: #ffe4ad;
+      border-color: #a45d00;
+      color: #4d2b00;
+    }
+
+    .content {
+      padding: 20px;
+    }
+
+    .page-title {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    .meta {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .prefill {
+      margin-top: 20px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 12px 14px;
+      border: 1px solid var(--green);
+      border-radius: 8px;
+      color: #244d14;
+      background: var(--green-soft);
+      font-size: 13px;
+    }
+
+    .prototype-note {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border: 1px solid #9bc5f8;
+      border-radius: 8px;
+      background: var(--blue-soft);
+      color: #0f3f78;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .section {
+      margin-top: 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 64px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .step {
+      width: 21px;
+      height: 21px;
+      border-radius: 999px;
+      background: var(--blue);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex: 0 0 auto;
+    }
+
+    .section-copy {
+      min-width: 0;
+      flex: 1;
+      display: grid;
+      gap: 2px;
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .section-subtitle {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .badge {
+      display: inline-flex;
+      min-height: 24px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .badge.blue {
+      color: #0759b6;
+      background: var(--blue-soft);
+      border: 1px solid var(--blue);
+    }
+
+    .badge.green {
+      color: #2d6817;
+      background: var(--green-soft);
+      border: 1px solid var(--green);
+    }
+
+    .badge.amber {
+      color: #6c3d00;
+      background: var(--amber-soft);
+      border: 1px solid var(--amber);
+    }
+
+    .badge.red {
+      color: var(--red);
+      background: var(--red-soft);
+      border: 1px solid var(--red);
+    }
+
+    .chevron {
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .section-body {
+      padding: 16px;
+      background: var(--surface);
+    }
+
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .grid.two {
+      grid-template-columns: repeat(2, minmax(240px, 1fr));
+    }
+
+    .grid.three {
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    }
+
+    .grid.five {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: #4b4f55;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .required {
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      padding: 10px 12px;
+      min-height: 42px;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      outline: 3px solid rgba(47, 120, 214, 0.14);
+      border-color: var(--blue);
+    }
+
+    .select-panel {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+      align-items: end;
+    }
+
+    .field-help {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    .model-summary {
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      color: #354052;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .model-panel[hidden] {
+      display: none;
+    }
+
+    .metric-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 116px;
+      background: var(--surface-soft);
+    }
+
+    .metric-card label {
+      min-height: 34px;
+      color: var(--muted);
+    }
+
+    .section-caption {
+      margin: 18px 0 12px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 7px;
+    }
+
+    .rag-options {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .rag {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      background: #fff;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex: 0 0 auto;
+    }
+
+    .dot.green { background: var(--green); }
+    .dot.amber { background: var(--amber); }
+    .dot.red { background: var(--red); }
+
+    .rag-select-wrap {
+      display: grid;
+      grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+      gap: 14px;
+      align-items: end;
+    }
+
+    .rag-explain {
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--amber-soft);
+      color: #4c3b1c;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .section-tools {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .section-tools p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .button.subtle {
+      background: var(--blue-soft);
+      border-color: #9bc5f8;
+      color: #0759b6;
+    }
+
+    .table-wrap {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow-x: auto;
+      background: var(--surface);
+    }
+
+    .table-wrap table {
+      width: 100%;
+      min-width: 1180px;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 13px;
+    }
+
+    .table-wrap th,
+    .table-wrap td {
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .table-wrap tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .table-wrap th:last-child,
+    .table-wrap td:last-child {
+      border-right: 0;
+    }
+
+    .table-wrap th {
+      color: #4b4f55;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      background: var(--surface-soft);
+    }
+
+    .table-wrap td select,
+    .table-wrap td input,
+    .table-wrap td textarea {
+      min-height: 36px;
+      padding: 7px 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      border-radius: 6px;
+    }
+
+    .table-wrap td textarea {
+      min-height: 58px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+
+    .table-wrap td input:focus,
+    .table-wrap td select:focus,
+    .table-wrap td textarea:focus {
+      background: #fff;
+      border-color: var(--blue);
+    }
+
+    .col-index { width: 44px; }
+    .col-description { width: 19%; }
+    .col-severity { width: 110px; }
+    .col-status { width: 130px; }
+    .col-mitigation { width: 18%; }
+    .col-owner { width: 132px; }
+    .col-date { width: 145px; }
+    .col-remark { width: 18%; }
+    .col-actions { width: 84px; }
+
+    tr.risk-remark-required td {
+      background: #fffaf0;
+    }
+
+    .risk-remark[required] {
+      border-color: var(--amber);
+      background: #fffaf0;
+    }
+
+    .risk-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon-button {
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .review-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .review-workbench {
+      display: grid;
+      grid-template-columns: minmax(280px, 0.82fr) minmax(360px, 1.18fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .review-pane {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .draft-pane {
+      position: sticky;
+      top: 86px;
+      align-self: start;
+    }
+
+    .pane-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 32px;
+    }
+
+    .pane-title strong {
+      font-size: 14px;
+    }
+
+    .review-item {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+
+    .review-item strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    .review-item p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .insights-collapse {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .insights-collapse summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 48px;
+      padding: 12px 14px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .insights-collapse[open] summary {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .insights-body {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .review-actions {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .draft-preview {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 1fr;
+      max-height: 560px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .draft-preview textarea {
+      min-height: 92px;
+    }
+
+    .share-preview {
+      display: grid;
+      gap: 16px;
+      padding: 20px;
+      min-width: 0;
+      border: 1px solid #cfd8e3;
+      border-radius: 8px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+      box-shadow: var(--shadow);
+    }
+
+    .share-preview-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      min-width: 0;
+      border-bottom: 1px solid #d8e2ee;
+      padding-bottom: 12px;
+    }
+
+    .share-preview-header > div {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .share-preview-header > .badge,
+    .share-preview-header > .report-pill {
+      flex: 0 0 auto;
+    }
+
+    .share-preview-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .report-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 4px 9px;
+      border: 1px solid #d4dce7;
+      border-radius: 999px;
+      background: #fff;
+      color: #354052;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .share-preview h2,
+    .share-preview h3 {
+      margin: 0;
+    }
+
+    .share-preview h2 {
+      font-size: 18px;
+    }
+
+    .share-preview h3 {
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .share-preview p {
+      margin: 0;
+      color: #354052;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .share-preview input,
+    .share-preview textarea {
+      width: 100%;
+      max-width: 100%;
+      border: 1px solid #d4dce7;
+      border-radius: 8px;
+      background: #fff;
+      color: #263241;
+    }
+
+    .share-preview textarea {
+      min-height: 82px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+
+    .share-preview .inline-input {
+      min-height: 34px;
+      padding: 4px 0;
+      font-weight: 700;
+      border-color: transparent;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .share-preview .inline-input:focus {
+      padding: 6px 8px;
+      border-color: var(--blue);
+      background: #fff;
+    }
+
+    .report-hero {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      min-width: 0;
+      align-items: stretch;
+    }
+
+    .report-summary {
+      display: grid;
+      align-content: start;
+      gap: 8px;
+      padding: 14px;
+      border-left: 4px solid var(--amber);
+      border-radius: 8px;
+      background: #fffaf0;
+      min-width: 0;
+    }
+
+    .report-health {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .health-card {
+      min-height: 86px;
+      padding: 12px;
+      min-width: 0;
+      border: 1px solid #d8e2ee;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .health-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .health-value {
+      display: block;
+      margin-top: 6px;
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .health-note {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .progress-strip {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      min-width: 0;
+      border: 1px solid #d8e2ee;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .progress-bar {
+      overflow: hidden;
+      height: 10px;
+      border-radius: 999px;
+      background: #e8edf3;
+    }
+
+    .progress-fill {
+      width: 67%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--green), var(--amber));
+    }
+
+    .report-table {
+      width: 100%;
+      min-width: 0;
+      border-collapse: collapse;
+      overflow: hidden;
+      border: 1px solid #d8e2ee;
+      border-radius: 8px;
+      background: #fff;
+      font-size: 12px;
+    }
+
+    .report-table-wrap {
+      overflow-x: auto;
+      border-radius: 8px;
+    }
+
+    .report-table th,
+    .report-table td {
+      padding: 10px;
+      border-bottom: 1px solid #e6ebf1;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .report-table th {
+      color: #4b5563;
+      background: #f3f6f9;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .report-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 6px;
+      border-radius: 999px;
+      background: var(--amber);
+    }
+
+    .report-actions-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .report-actions-list li {
+      padding: 10px;
+      border: 1px solid #d8e2ee;
+      border-radius: 8px;
+      background: #fff;
+      color: #354052;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .next-week-focus textarea {
+      min-height: 132px;
+    }
+
+    .share-preview-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .share-preview-block {
+      padding: 12px;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+
+    .approval-panel {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+
+    .bottom-actions {
+      position: sticky;
+      bottom: 0;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      padding: 12px 18px;
+      background: rgba(255, 255, 255, 0.96);
+      border-top: 1px solid var(--border);
+    }
+
+    .primary {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+
+    @media (max-width: 980px) {
+      .report-health {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .toolbar {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .grid.two,
+      .grid.three,
+      .grid.five,
+      .rag-options,
+      .select-panel,
+      .rag-select-wrap,
+      .draft-preview,
+      .share-preview-grid,
+      .report-hero,
+      .review-workbench {
+        grid-template-columns: 1fr;
+      }
+
+      .content {
+        padding: 14px;
+      }
+
+      .section-head {
+        align-items: flex-start;
+      }
+
+      .share-preview {
+        padding: 14px;
+      }
+
+      .share-preview-header {
+        flex-direction: column;
+      }
+
+      .report-health {
+        grid-template-columns: 1fr;
+      }
+
+      .draft-pane {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="crumb">
+        <span>Weekly reports</span>
+        <span class="crumb-muted">/</span>
+        <strong>New WSR</strong>
+      </div>
+      <div class="toolbar">
+        <span class="chip draft">Draft</span>
+        <button class="button" type="button">Preview</button>
+        <button class="button" type="button">History</button>
+      </div>
+    </header>
+
+    <section class="content">
+      <h1 class="page-title">Create weekly status report</h1>
+      <div class="meta">Week of Jun 23 - Jun 27, 2025 · Last saved 14 min ago</div>
+      <div class="prototype-note">Updated review layout: AI insights are collapsible PM-only guidance, and the ready-to-share WSR preview is the editable review surface.</div>
+
+      <div class="prefill">
+        <strong>OK</strong>
+        <span>Previous week data (Jun 16 - Jun 20, 2025) prefilled. Review and update before submitting.</span>
+      </div>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="step">1</span>
+          <div class="section-copy">
+            <div class="section-title">Account and project</div>
+            <div class="section-subtitle">Select the account and project for this report</div>
+          </div>
+          <span class="badge blue">Required</span>
+          <span class="chevron">^</span>
+        </div>
+        <div class="section-body">
+          <div class="grid three">
+            <div>
+              <label>Account <span class="required">*</span></label>
+              <select>
+                <option>TechCorp Inc.</option>
+              </select>
+            </div>
+            <div>
+              <label>Project <span class="required">*</span></label>
+              <select>
+                <option>TechCorp Portal Revamp</option>
+              </select>
+            </div>
+            <div>
+              <label>WSR date <span class="required">*</span></label>
+              <input type="date" value="2025-06-27">
+            </div>
+            <div>
+              <label>Reporting period</label>
+              <input type="text" value="Jun 23 - Jun 27" readonly>
+            </div>
+            <div>
+              <label>Report prepared by</label>
+              <input type="text" value="Arjun Kapoor" readonly>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="step">2</span>
+          <div class="section-copy">
+            <div class="section-title">Delivery model</div>
+            <div class="section-subtitle" id="deliveryModelSubtitle">Sprint based is active</div>
+          </div>
+          <span class="badge blue" id="deliveryModelBadge">Sprint based</span>
+          <span class="chevron">^</span>
+        </div>
+        <div class="section-body">
+          <div class="select-panel">
+            <div>
+              <label for="deliveryModel">Delivery model <span class="required">*</span></label>
+              <select id="deliveryModel">
+                <option selected>Sprint based</option>
+                <option>PI based</option>
+              </select>
+              <div class="field-help">Changing the model updates the metrics and validation rules.</div>
+            </div>
+            <div class="model-summary" id="deliveryModelSummary">
+              Sprint-based reporting captures sprint dates, planned scope, completed scope, spillover, effort, and RAG status.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="step">3</span>
+          <div class="section-copy">
+            <div class="section-title" id="setupTitle">Sprint setup</div>
+            <div class="section-subtitle" id="setupSubtitle">Sprint 14 · Jun 23 - Jul 4</div>
+          </div>
+          <span class="badge green">Prefilled</span>
+          <span class="chevron">^</span>
+        </div>
+        <div class="section-body">
+          <div class="grid five model-panel" data-model-panel="Sprint based">
+            <div>
+              <label>Sprint name / number <span class="required">*</span></label>
+              <input type="text" value="Sprint 14">
+            </div>
+            <div>
+              <label>Start date <span class="required">*</span></label>
+              <input type="date" value="2025-06-23">
+            </div>
+            <div>
+              <label>End date <span class="required">*</span></label>
+              <input type="date" value="2025-07-04">
+            </div>
+            <div>
+              <label>Planned stories</label>
+              <input type="number" value="18" id="sprintPlannedStories">
+            </div>
+            <div>
+              <label>Planned story points</label>
+              <input type="number" value="70" id="sprintPlannedPoints">
+            </div>
+            <div>
+              <label>Planned sprint effort (hrs)</label>
+              <input type="number" value="160" id="sprintPlannedEffort">
+            </div>
+            <div>
+              <label>DOR %</label>
+              <input type="number" value="85">
+            </div>
+          </div>
+          <div class="grid five model-panel" data-model-panel="PI based" hidden>
+            <div>
+              <label>PI name / number <span class="required">*</span></label>
+              <input type="text" value="PI 2025-Q3">
+            </div>
+            <div>
+              <label>PI start date <span class="required">*</span></label>
+              <input type="date" value="2025-06-23">
+            </div>
+            <div>
+              <label>PI end date <span class="required">*</span></label>
+              <input type="date" value="2025-09-12">
+            </div>
+            <div>
+              <label>Total sprints</label>
+              <input type="number" value="6" id="piTotalSprints">
+            </div>
+            <div>
+              <label>Planned story points</label>
+              <input type="number" value="280" id="piPlannedPoints">
+            </div>
+            <div>
+              <label>Committed features</label>
+              <input type="number" value="12">
+            </div>
+            <div>
+              <label>Target release</label>
+              <input type="text" value="Portal v2.4">
+            </div>
+            <div>
+              <label>PI objectives</label>
+              <input type="text" value="Auth, API, Dashboard">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="step">4</span>
+          <div class="section-copy">
+            <div class="section-title">Delivery progress</div>
+            <div class="section-subtitle">Current week actuals and progress narrative</div>
+          </div>
+          <span class="badge amber" id="ragBadge">RAG: Amber</span>
+          <span class="chevron">^</span>
+        </div>
+        <div class="section-body">
+          <div class="model-panel" data-model-panel="Sprint based">
+            <label>High-level progress update <span class="required">*</span></label>
+            <textarea>Team completed the authentication module and began API integration work. Encountered a delay in third-party API documentation but mitigated by creating mock endpoints for parallel development.</textarea>
+
+            <div class="section-caption">Delivery metrics</div>
+            <div class="grid five">
+              <div class="metric-card">
+                <label>Stories completed</label>
+                <input type="number" value="12" id="sprintStoriesCompleted">
+              </div>
+              <div class="metric-card">
+                <label>Story points completed</label>
+                <input type="number" value="48" id="sprintPointsCompleted">
+              </div>
+              <div class="metric-card">
+                <label>Effort burned (hrs)</label>
+                <input type="number" value="140" id="sprintEffortBurned">
+              </div>
+              <div class="metric-card">
+                <label>Unplanned stories</label>
+                <input type="number" value="2">
+              </div>
+              <div class="metric-card">
+                <label>Unplanned story pts</label>
+                <input type="number" value="6" id="sprintUnplannedPoints">
+              </div>
+              <div class="metric-card">
+                <label>Sprint completion %</label>
+                <input type="text" value="67%" id="sprintCompletion" readonly>
+              </div>
+              <div class="metric-card">
+                <label>Point completion %</label>
+                <input type="text" value="69%" id="sprintPointCompletion" readonly>
+              </div>
+              <div class="metric-card">
+                <label>Effort usage %</label>
+                <input type="text" value="88%" id="sprintEffortUsage" readonly>
+              </div>
+            </div>
+          </div>
+
+          <div class="model-panel" data-model-panel="PI based" hidden>
+            <label>PI progress update <span class="required">*</span></label>
+            <textarea>PI remains on track for authentication and API integration objectives. Dashboard scope is slightly delayed due to dependency clarification, but the team recovered API work using mock endpoints.</textarea>
+
+            <div class="section-caption">This week PI update</div>
+            <div class="grid five">
+              <div class="metric-card">
+                <label>Current sprint</label>
+                <input type="number" value="2" id="piCurrentSprint">
+              </div>
+              <div class="metric-card">
+                <label>Completed before this week</label>
+                <input type="number" value="45" id="piPriorCompletedPoints" readonly>
+              </div>
+              <div class="metric-card">
+                <label>Story points completed this week</label>
+                <input type="number" value="42" id="piCompletedThisWeek">
+              </div>
+              <div class="metric-card">
+                <label>Features completed this week</label>
+                <input type="number" value="2">
+              </div>
+              <div class="metric-card">
+                <label>Delayed scope items</label>
+                <input type="number" value="1">
+              </div>
+              <div class="metric-card">
+                <label>Blockers / dependencies</label>
+                <input type="number" value="2">
+              </div>
+            </div>
+
+            <div class="section-caption">System calculated PI health</div>
+            <div class="grid five">
+              <div class="metric-card">
+                <label>PI completion %</label>
+                <input type="text" value="31%" id="piCompletion" readonly>
+              </div>
+              <div class="metric-card">
+                <label>Remaining story points</label>
+                <input type="number" value="193" id="piRemainingPoints" readonly>
+              </div>
+              <div class="metric-card">
+                <label>Required velocity</label>
+                <input type="number" value="48" id="piRequiredVelocity" readonly>
+              </div>
+              <div class="metric-card">
+                <label>Average velocity</label>
+                <input type="number" value="44" id="piAverageVelocity" readonly>
+              </div>
+              <div class="metric-card">
+                <label>Confidence</label>
+                <input type="text" value="Medium" id="piConfidence" readonly>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-caption">Overall RAG status</div>
+          <div class="rag-select-wrap">
+            <div>
+              <label for="ragStatus">RAG status <span class="required">*</span></label>
+              <select id="ragStatus">
+                <option>Green - on track</option>
+                <option selected>Amber - at risk</option>
+                <option>Red - off track</option>
+              </select>
+              <div class="field-help">Choose the customer-facing status for the current reporting week.</div>
+            </div>
+            <div class="rag-explain" id="ragExplain">
+              Amber indicates delivery is still manageable but needs stakeholder attention, mitigation, or close monitoring.
+            </div>
+          </div>
+
+          <div class="grid two" style="margin-top: 14px;">
+            <div>
+              <label>Next week plan</label>
+              <textarea placeholder="Key focus areas planned for next week"></textarea>
+            </div>
+            <div>
+              <label>Remarks / notes</label>
+              <textarea placeholder="Any additional context for stakeholders"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="step">5</span>
+          <div class="section-copy">
+            <div class="section-title">Risks and dependencies</div>
+            <div class="section-subtitle" id="riskSummary">3 risks logged · 1 high severity</div>
+          </div>
+          <span class="badge red" id="riskBadge">1 high</span>
+          <span class="chevron">^</span>
+        </div>
+        <div class="section-body">
+          <div class="section-tools">
+            <p>Add risks as they emerge. High severity risks require owner, mitigation, and planned closure date. Closing an In-Progress risk requires a closure remark.</p>
+            <button class="button subtle" type="button" id="addRiskButton">+ Add risk row</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <colgroup>
+                <col class="col-index">
+                <col class="col-description">
+                <col class="col-severity">
+                <col class="col-status">
+                <col class="col-mitigation">
+                <col class="col-owner">
+                <col class="col-date">
+                <col class="col-remark">
+                <col class="col-actions">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Risk description</th>
+                  <th>Severity</th>
+                  <th>Status</th>
+                  <th>Mitigation</th>
+                  <th>Owner</th>
+                  <th>Closure date</th>
+                  <th>Remark</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="riskTableBody">
+                <tr>
+                  <td>1</td>
+                  <td><textarea>Third-party API documentation delay blocking integration</textarea></td>
+                  <td>
+                    <select class="risk-severity">
+                      <option selected>High</option>
+                      <option>Medium</option>
+                      <option>Low</option>
+                    </select>
+                  </td>
+                  <td>
+                    <select class="risk-status">
+                      <option selected>Open</option>
+                      <option>In-Progress</option>
+                      <option>Closed</option>
+                    </select>
+                  </td>
+                  <td><textarea>Created mock endpoints and scheduled vendor clarification call</textarea></td>
+                  <td><input type="text" value="Priya Rao"></td>
+                  <td><input type="date" value="2025-07-03"></td>
+                  <td><textarea class="risk-remark" placeholder="Required when status is Closed"></textarea></td>
+                  <td class="risk-actions"><button class="icon-button" type="button" data-remove-risk aria-label="Remove risk">x</button></td>
+                </tr>
+                <tr>
+                  <td>2</td>
+                  <td><textarea>Key developer on leave 3 days mid-sprint</textarea></td>
+                  <td>
+                    <select class="risk-severity">
+                      <option>High</option>
+                      <option selected>Medium</option>
+                      <option>Low</option>
+                    </select>
+                  </td>
+                  <td>
+                    <select class="risk-status">
+                      <option>Open</option>
+                      <option selected>In-Progress</option>
+                      <option>Closed</option>
+                    </select>
+                  </td>
+                  <td><textarea>Reassigned API tasks and adjusted sprint capacity</textarea></td>
+                  <td><input type="text" value="Arjun Kapoor"></td>
+                  <td><input type="date" value="2025-06-30"></td>
+                  <td><textarea class="risk-remark" placeholder="Required when status is Closed"></textarea></td>
+                  <td class="risk-actions"><button class="icon-button" type="button" data-remove-risk aria-label="Remove risk">x</button></td>
+                </tr>
+                <tr>
+                  <td>3</td>
+                  <td><textarea>UAT environment intermittent downtime</textarea></td>
+                  <td>
+                    <select class="risk-severity">
+                      <option>High</option>
+                      <option>Medium</option>
+                      <option selected>Low</option>
+                    </select>
+                  </td>
+                  <td>
+                    <select class="risk-status">
+                      <option>Open</option>
+                      <option selected>In-Progress</option>
+                      <option>Closed</option>
+                    </select>
+                  </td>
+                  <td><textarea>Infra team monitoring and failover test scheduled</textarea></td>
+                  <td><input type="text" value="Neha Shah"></td>
+                  <td><input type="date" value="2025-07-05"></td>
+                  <td><textarea class="risk-remark" placeholder="Required when status is Closed"></textarea></td>
+                  <td class="risk-actions"><button class="icon-button" type="button" data-remove-risk aria-label="Remove risk">x</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="step">6</span>
+          <div class="section-copy">
+            <div class="section-title">AI insights</div>
+            <div class="section-subtitle">Collapsed PM-only guidance for improving WSR quality</div>
+          </div>
+          <span class="badge amber">3 insights</span>
+          <span class="chevron">^</span>
+        </div>
+        <div class="section-body">
+          <details class="insights-collapse">
+            <summary>
+              <span>View 3 AI insights and suggestions</span>
+              <span class="badge amber">PM only</span>
+            </summary>
+            <div class="insights-body">
+              <div class="field-help">Insights are internal guidance. PM applies changes by editing the ready-to-share WSR preview below.</div>
+              <div class="review-item">
+                <div>
+                  <strong>Status discrepancy · High</strong>
+                  <p>Amber RAG is supported by API dependency risk and spillover. Add a clearer mitigation outcome for customer readiness.</p>
+                </div>
+              </div>
+              <div class="review-item">
+                <div>
+                  <strong>Risk communication · Medium</strong>
+                  <p>Third-party API risk has mitigation, but planned closure depends on vendor response. Add escalation owner and fallback date.</p>
+                </div>
+              </div>
+              <div class="review-item">
+                <div>
+                  <strong>Customer-ready wording · Low</strong>
+                  <p>Replace internal phrase "mock endpoints" with "parallel test interface" in the customer-facing progress summary.</p>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="step">7</span>
+          <div class="section-copy">
+            <div class="section-title">Ready-to-share WSR preview</div>
+            <div class="section-subtitle">Editable customer-facing WSR generated before approval</div>
+          </div>
+          <span class="badge blue">Preview</span>
+          <span class="chevron">^</span>
+        </div>
+        <div class="section-body">
+          <div class="share-preview" aria-label="Ready to share weekly status report preview">
+            <div class="share-preview-header">
+              <div>
+                <h2>Weekly Status Report · TechCorp Portal Revamp</h2>
+                <input class="inline-input" type="text" value="Reporting period: Jun 23 - Jun 27, 2025 · Prepared by Arjun Kapoor" aria-label="Report period and prepared by">
+                <div class="share-preview-meta">
+                  <span class="report-pill">Account: TechCorp Inc.</span>
+                  <span class="report-pill">Delivery model: Sprint based</span>
+                  <span class="report-pill">Sprint 14</span>
+                  <span class="report-pill">Customer-ready draft</span>
+                </div>
+              </div>
+              <span class="badge amber">RAG: Amber</span>
+            </div>
+
+            <div class="report-hero">
+              <div class="report-summary">
+                <h3>Executive summary</h3>
+                <textarea aria-label="Executive summary">Authentication module completed and API integration progressed with controlled mitigation for vendor documentation dependency. Overall delivery remains manageable, with Amber status driven by integration dependency and sprint spillover.</textarea>
+              </div>
+              <div class="report-health">
+                <div class="health-card">
+                  <span class="health-label">Story completion</span>
+                  <span class="health-value">67%</span>
+                  <span class="health-note">12 of 18 planned stories completed</span>
+                </div>
+                <div class="health-card">
+                  <span class="health-label">Story points</span>
+                  <span class="health-value">48 / 70</span>
+                  <span class="health-note">22 points remain in sprint scope</span>
+                </div>
+                <div class="health-card">
+                  <span class="health-label">DOR adherence</span>
+                  <span class="health-value">85%</span>
+                  <span class="health-note">Healthy readiness, minor API gaps</span>
+                </div>
+                <div class="health-card">
+                  <span class="health-label">Open risk</span>
+                  <span class="health-value">1 High</span>
+                  <span class="health-note">Vendor API documentation dependency</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="progress-strip">
+              <div class="share-preview-header">
+                <div>
+                  <h3>Sprint progress snapshot</h3>
+                  <textarea aria-label="Sprint progress snapshot">Current completion is tracking below plan because API integration validation is waiting on vendor clarification.</textarea>
+                </div>
+                <span class="report-pill">Target: 100% by Jul 4</span>
+              </div>
+              <div class="progress-bar" aria-label="Sprint completion 67 percent">
+                <div class="progress-fill"></div>
+              </div>
+            </div>
+
+            <div class="share-preview-grid">
+              <div class="share-preview-block">
+                <h3>Key achievements</h3>
+                <textarea aria-label="Key achievements">Completed authentication module. Established API integration baseline. Created test interface to protect delivery progress while vendor clarification is pending.</textarea>
+              </div>
+              <div class="share-preview-block">
+                <h3>Delivery progress</h3>
+                <textarea aria-label="Delivery progress">The team completed core authentication work and advanced API integration. Vendor documentation dependency is being managed through a parallel test interface and planned clarification.</textarea>
+              </div>
+              <div class="share-preview-block">
+                <h3>Next week plan</h3>
+                <textarea aria-label="Next week plan">Close API documentation dependency, complete integration validation, and prepare dashboard API contract review with stakeholders.</textarea>
+              </div>
+              <div class="share-preview-block">
+                <h3>Remarks</h3>
+                <textarea aria-label="Remarks">Delivery remains under active control with focused mitigation for integration dependency and clear ownership for closure.</textarea>
+              </div>
+            </div>
+
+            <div>
+              <h3>Risks and dependencies</h3>
+              <div class="report-table-wrap">
+                <table class="report-table" aria-label="Customer-facing risks and dependencies">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Impact</th>
+                      <th>Mitigation</th>
+                      <th>Owner</th>
+                      <th>Closure</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="status-dot"></span>API documentation dependency</td>
+                      <td>May delay final API integration validation</td>
+                      <td>Parallel test interface active; vendor clarification requested</td>
+                      <td>Priya Rao</td>
+                      <td>Jul 3, 2025</td>
+                    </tr>
+                    <tr>
+                      <td><span class="status-dot"></span>Key developer leave</td>
+                      <td>Minor capacity pressure for integration tasks</td>
+                      <td>Tasks reassigned and sprint capacity adjusted</td>
+                      <td>Arjun Kapoor</td>
+                      <td>Jun 30, 2025</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="next-week-focus">
+              <h3>Next week focus and actions</h3>
+              <textarea aria-label="Next week focus and actions">Integration validation: Complete API validation once vendor clarification is received and publish validation outcome in next report.
+
+Dashboard contract: Review dashboard API contract with stakeholders and confirm readiness for next sprint build.
+
+Risk closure: Track vendor dependency daily until closure or escalation threshold is reached.</textarea>
+            </div>
+            <div class="field-help">This editable WSR is the approvable customer-facing content. PM-only insights, discrepancy evidence, and internal AI metadata are excluded from export.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <span class="step">8</span>
+          <div class="section-copy">
+            <div class="section-title">Approval and export</div>
+            <div class="section-subtitle">Export unlocks only after approved content version is recorded</div>
+          </div>
+          <span class="badge green">Ready</span>
+          <span class="chevron">^</span>
+        </div>
+        <div class="section-body">
+          <div class="approval-panel">
+            <div>
+              <strong>Content version v1</strong>
+              <div class="field-help">PM-only insights and internal evidence are excluded from PPTX export.</div>
+            </div>
+            <div class="review-actions">
+              <button class="button" type="button">Reject</button>
+              <button class="button subtle" type="button">Approve with edits</button>
+              <button class="button primary" type="button">Approve</button>
+              <button class="button" type="button" disabled>Export PPTX</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <footer class="bottom-actions">
+      <button class="button" type="button">Save draft</button>
+      <button class="button primary" type="button">Generate WSR</button>
+    </footer>
+  </main>
+  <script>
+    const deliveryModel = document.getElementById('deliveryModel');
+    const deliveryModelBadge = document.getElementById('deliveryModelBadge');
+    const deliveryModelSubtitle = document.getElementById('deliveryModelSubtitle');
+    const deliveryModelSummary = document.getElementById('deliveryModelSummary');
+    const setupTitle = document.getElementById('setupTitle');
+    const setupSubtitle = document.getElementById('setupSubtitle');
+    const modelPanels = Array.from(document.querySelectorAll('[data-model-panel]'));
+    const modelSummaries = {
+      'Sprint based': 'Sprint-based reporting captures sprint dates, planned scope, completed scope, spillover, effort, and RAG status.',
+      'PI based': 'PI-based reporting captures PI scope, current sprint, delivered scope, remaining scope, and required velocity.'
+    };
+    const setupCopy = {
+      'Sprint based': {
+        title: 'Sprint setup',
+        subtitle: 'Sprint 14 · Jun 23 - Jul 4'
+      },
+      'PI based': {
+        title: 'PI setup',
+        subtitle: 'PI 2025-Q3 · Jun 23 - Sep 12'
+      }
+    };
+
+    function updateDeliveryModel() {
+      const selected = deliveryModel.value;
+      deliveryModelBadge.textContent = selected;
+      deliveryModelSubtitle.textContent = `${selected} is active`;
+      deliveryModelSummary.textContent = modelSummaries[selected];
+      const copy = setupCopy[selected] || {
+        title: `${selected} setup`,
+        subtitle: 'Detailed fields not configured in this prototype'
+      };
+      setupTitle.textContent = copy.title;
+      setupSubtitle.textContent = copy.subtitle;
+      modelPanels.forEach(panel => {
+        panel.hidden = panel.dataset.modelPanel !== selected;
+      });
+    }
+
+    deliveryModel.addEventListener('change', updateDeliveryModel);
+    updateDeliveryModel();
+
+    const ragStatus = document.getElementById('ragStatus');
+    const ragBadge = document.getElementById('ragBadge');
+    const ragExplain = document.getElementById('ragExplain');
+    const ragText = {
+      Green: 'Green indicates delivery is on track with no major unmanaged risk or recovery action required.',
+      Amber: 'Amber indicates delivery is still manageable but needs stakeholder attention, mitigation, or close monitoring.',
+      Red: 'Red indicates delivery is off track and requires immediate escalation, recovery planning, or leadership intervention.'
+    };
+
+    function updateRagStatus() {
+      const value = ragStatus.value.split(' ')[0];
+      ragBadge.textContent = `RAG: ${value}`;
+      ragBadge.className = `badge ${value === 'Green' ? 'green' : value === 'Red' ? 'red' : 'amber'}`;
+      ragExplain.textContent = ragText[value];
+    }
+
+    ragStatus.addEventListener('change', updateRagStatus);
+
+    const sprintPlannedStories = document.getElementById('sprintPlannedStories');
+    const sprintPlannedPoints = document.getElementById('sprintPlannedPoints');
+    const sprintPlannedEffort = document.getElementById('sprintPlannedEffort');
+    const sprintStoriesCompleted = document.getElementById('sprintStoriesCompleted');
+    const sprintPointsCompleted = document.getElementById('sprintPointsCompleted');
+    const sprintEffortBurned = document.getElementById('sprintEffortBurned');
+    const sprintCompletion = document.getElementById('sprintCompletion');
+    const sprintPointCompletion = document.getElementById('sprintPointCompletion');
+    const sprintEffortUsage = document.getElementById('sprintEffortUsage');
+    const piTotalSprints = document.getElementById('piTotalSprints');
+    const piPlannedPoints = document.getElementById('piPlannedPoints');
+    const piCurrentSprint = document.getElementById('piCurrentSprint');
+    const piPriorCompletedPoints = document.getElementById('piPriorCompletedPoints');
+    const piCompletedThisWeek = document.getElementById('piCompletedThisWeek');
+    const piCompletion = document.getElementById('piCompletion');
+    const piRemainingPoints = document.getElementById('piRemainingPoints');
+    const piRequiredVelocity = document.getElementById('piRequiredVelocity');
+    const piAverageVelocity = document.getElementById('piAverageVelocity');
+    const piConfidence = document.getElementById('piConfidence');
+
+    function numberValue(input) {
+      return Number(input?.value || 0);
+    }
+
+    function rounded(value, digits = 0) {
+      return Number.isFinite(value) ? Number(value.toFixed(digits)) : 0;
+    }
+
+    function updateSprintCalculations() {
+      const planned = numberValue(sprintPlannedStories);
+      const completed = numberValue(sprintStoriesCompleted);
+      const plannedPoints = numberValue(sprintPlannedPoints);
+      const completedPoints = numberValue(sprintPointsCompleted);
+      const plannedEffort = numberValue(sprintPlannedEffort);
+      const burnedEffort = numberValue(sprintEffortBurned);
+      const completion = planned > 0 ? Math.min((completed / planned) * 100, 100) : 0;
+      const pointCompletion = plannedPoints > 0 ? Math.min((completedPoints / plannedPoints) * 100, 100) : 0;
+      const effortUsage = plannedEffort > 0 ? Math.min((burnedEffort / plannedEffort) * 100, 999) : 0;
+      sprintCompletion.value = `${rounded(completion)}%`;
+      sprintPointCompletion.value = `${rounded(pointCompletion)}%`;
+      sprintEffortUsage.value = `${rounded(effortUsage)}%`;
+    }
+
+    function updatePiCalculations() {
+      const totalSprints = Math.max(numberValue(piTotalSprints), 1);
+      const plannedPoints = Math.max(numberValue(piPlannedPoints), 0);
+      const currentSprint = Math.min(Math.max(numberValue(piCurrentSprint), 1), totalSprints);
+      const priorCompleted = Math.max(numberValue(piPriorCompletedPoints), 0);
+      const completedThisWeek = Math.max(numberValue(piCompletedThisWeek), 0);
+      const completedToDate = Math.min(priorCompleted + completedThisWeek, plannedPoints);
+      const remaining = Math.max(plannedPoints - completedToDate, 0);
+      const sprintsRemaining = Math.max(totalSprints - currentSprint, 1);
+      const completion = plannedPoints > 0 ? (completedToDate / plannedPoints) * 100 : 0;
+      const averageVelocity = currentSprint > 0 ? completedToDate / currentSprint : 0;
+      const requiredVelocity = remaining / sprintsRemaining;
+
+      piCompletion.value = `${rounded(completion)}%`;
+      piRemainingPoints.value = rounded(remaining);
+      piRequiredVelocity.value = rounded(requiredVelocity);
+      piAverageVelocity.value = rounded(averageVelocity);
+      piConfidence.value = averageVelocity >= requiredVelocity
+        ? 'High'
+        : averageVelocity >= requiredVelocity * 0.8
+          ? 'Medium'
+          : 'Low';
+    }
+
+    [sprintPlannedStories, sprintPlannedPoints, sprintPlannedEffort, sprintStoriesCompleted, sprintPointsCompleted, sprintEffortBurned].forEach(input => {
+      input.addEventListener('input', updateSprintCalculations);
+    });
+
+    [piTotalSprints, piPlannedPoints, piCurrentSprint, piCompletedThisWeek].forEach(input => {
+      input.addEventListener('input', updatePiCalculations);
+    });
+
+    updateSprintCalculations();
+    updatePiCalculations();
+
+    const riskBody = document.getElementById('riskTableBody');
+    const addRiskButton = document.getElementById('addRiskButton');
+    const riskSummary = document.getElementById('riskSummary');
+    const riskBadge = document.getElementById('riskBadge');
+
+    function updateRiskSummary() {
+      const rows = Array.from(riskBody.querySelectorAll('tr'));
+      rows.forEach((row, index) => {
+        row.children[0].textContent = index + 1;
+        updateRiskRemarkRule(row);
+      });
+      const highCount = rows.filter(row => row.querySelector('.risk-severity')?.value === 'High').length;
+      riskSummary.textContent = `${rows.length} risks logged · ${highCount} high severity`;
+      riskBadge.textContent = `${highCount} high`;
+      riskBadge.className = `badge ${highCount > 0 ? 'red' : 'green'}`;
+    }
+
+    function updateRiskRemarkRule(row) {
+      const status = row.querySelector('.risk-status')?.value;
+      const remark = row.querySelector('.risk-remark');
+      if (!remark) return;
+      const requiresRemark = status === 'Closed';
+      remark.required = requiresRemark;
+      row.classList.toggle('risk-remark-required', requiresRemark && !remark.value.trim());
+      remark.placeholder = requiresRemark
+        ? 'Mandatory closure remark'
+        : 'Required when status is Closed';
+    }
+
+    function buildRiskRow() {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td></td>
+        <td><textarea placeholder="Describe the risk or dependency"></textarea></td>
+        <td>
+          <select class="risk-severity">
+            <option>High</option>
+            <option selected>Medium</option>
+            <option>Low</option>
+          </select>
+        </td>
+        <td>
+          <select class="risk-status">
+            <option selected>Open</option>
+            <option>In-Progress</option>
+            <option>Closed</option>
+          </select>
+        </td>
+        <td><textarea placeholder="Mitigation or next action"></textarea></td>
+        <td><input type="text" placeholder="Owner"></td>
+        <td><input type="date"></td>
+        <td><textarea class="risk-remark" placeholder="Required when status is Closed"></textarea></td>
+        <td class="risk-actions"><button class="icon-button" type="button" data-remove-risk aria-label="Remove risk">x</button></td>
+      `;
+      return row;
+    }
+
+    addRiskButton.addEventListener('click', () => {
+      riskBody.appendChild(buildRiskRow());
+      updateRiskSummary();
+      riskBody.lastElementChild.querySelector('textarea').focus();
+    });
+
+    riskBody.addEventListener('click', event => {
+      if (!event.target.matches('[data-remove-risk]')) return;
+      const rows = riskBody.querySelectorAll('tr');
+      if (rows.length === 1) return;
+      event.target.closest('tr').remove();
+      updateRiskSummary();
+    });
+
+    riskBody.addEventListener('change', event => {
+      if (event.target.matches('.risk-severity, .risk-status')) updateRiskSummary();
+    });
+
+    riskBody.addEventListener('input', event => {
+      if (!event.target.matches('.risk-remark')) return;
+      updateRiskRemarkRule(event.target.closest('tr'));
+    });
+  </script>
+</body>
+</html>

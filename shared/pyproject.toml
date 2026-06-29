@@ -1,0 +1,16 @@
+[project]
+name = "wsr-shared"
+version = "0.1.0"
+description = "Shared contracts and generated artifacts for WSR Creation Agent."
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic>=2.11.0",
+]
+
+[build-system]
+requires = ["setuptools>=80.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
