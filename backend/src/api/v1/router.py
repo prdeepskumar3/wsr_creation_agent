@@ -1,9 +1,11 @@
 from fastapi import APIRouter
 
+from api.v1.wsr_drafts import router as wsr_drafts_router
 from api.v1.delivery_models import router as delivery_models_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(delivery_models_router)
+api_v1_router.include_router(wsr_drafts_router)
 
 
 @api_v1_router.get("/health", tags=["health"])
