@@ -215,4 +215,5 @@ def test_wsr_draft_routes_are_registered() -> None:
     registered_paths |= collect_api_paths(api_v1_router.routes, "/api/v1")
 
     assert "/api/v1/wsr-drafts" in registered_paths
+    assert "/api/v1/wsr-drafts/validate" in registered_paths
     assert "/api/v1/wsr-drafts/{wsr_id}" in registered_paths
