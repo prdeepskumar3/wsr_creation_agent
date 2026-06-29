@@ -10,6 +10,7 @@ class AppSettings(BaseSettings):
     app_version: str = "0.1.0"
     app_env: str = "local"
     log_level: str = "INFO"
+    database_url: str = "sqlite:///./wsr_creation_agent.db"
     llm_provider_mode: str = "stub"
     grok_api_key: str | None = None
     deepseek_api_key: str | None = None

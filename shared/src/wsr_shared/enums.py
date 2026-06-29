@@ -32,6 +32,25 @@ class RiskSeverity(StrEnum):
     LOW = "LOW"
 
 
+class WsrLifecycleStatus(StrEnum):
+    """Lifecycle status for a weekly status report."""
+
+    DRAFT = "DRAFT"
+    GENERATED = "GENERATED"
+    REVIEWED = "REVIEWED"
+    APPROVED = "APPROVED"
+    EXPORTED = "EXPORTED"
+
+
+class WsrGenerationStatus(StrEnum):
+    """AI generation workflow status for a weekly status report."""
+
+    NOT_STARTED = "NOT_STARTED"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
 class ConfidenceLevel(StrEnum):
     """Calculated confidence signal for delivery completion."""
 

@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -12,6 +13,8 @@ from wsr_shared.enums import (
     RagStatus,
     RiskSeverity,
     RiskStatus,
+    WsrGenerationStatus,
+    WsrLifecycleStatus,
     WsrReviewDecision,
 )
 
@@ -212,6 +215,61 @@ class CalculatedPiMetricsDTO(ApiDTO):
     )
     confidence: ConfidenceLevel = Field(
         ..., description="Confidence based on average vs required velocity."
+    )
+
+
+class WsrDraftSaveRequestDTO(ApiDTO):
+    """PM-entered WSR draft payload saved before AI generation starts."""
+
+    account_id: UUID = Field(..., description="Account boundary for the WSR draft.")
+    project_id: UUID = Field(..., description="Project for the WSR draft.")
+    prepared_by: UUID = Field(..., description="PM user creating or updating the draft.")
+    reporting_week: date = Field(..., description="Week start date for this WSR.")
+    delivery_model: DeliveryModel = Field(..., description="Selected delivery model.")
+    model_setup: dict[str, Any] = Field(
+        default_factory=dict, description="Delivery-model setup form values."
+    )
+    weekly_progress: dict[str, Any] = Field(
+        default_factory=dict, description="Current-week delivery progress form values."
+    )
+    risks: list[RiskInputDTO] = Field(
+        default_factory=list, description="Risk/dependency rows captured in the WSR."
+    )
+    overview: str | None = Field(None, description="Optional PM overview/context note.")
+    key_achievements: str | None = Field(None, description="Optional PM achievements note.")
+    next_week_focus: str | None = Field(None, description="Optional next-week focus note.")
+    remarks: str | None = Field(None, description="Optional stakeholder-safe remarks.")
+
+
+class WsrDraftResponseDTO(ApiDTO):
+    """Saved WSR draft state returned to restore the full UI form."""
+
+    wsr_id: UUID = Field(..., description="Saved WSR draft identifier.")
+    account_id: UUID = Field(..., description="Account boundary for the WSR draft.")
+    project_id: UUID = Field(..., description="Project for the WSR draft.")
+    prepared_by: UUID = Field(..., description="PM user who owns the draft.")
+    reporting_week: date = Field(..., description="Week start date for this WSR.")
+    delivery_model: DeliveryModel = Field(..., description="Selected delivery model.")
+    lifecycle_status: WsrLifecycleStatus = Field(..., description="Current report lifecycle state.")
+    generation_status: WsrGenerationStatus = Field(
+        ..., description="AI generation state; draft save keeps this NOT_STARTED."
+    )
+    schema_version: str = Field(..., description="Draft schema version.")
+    version_number: int = Field(..., ge=1, description="Draft version number.")
+    entered_data_snapshot: dict[str, Any] = Field(
+        default_factory=dict, description="Full UI snapshot for form restore."
+    )
+    model_setup_snapshot: dict[str, Any] = Field(
+        default_factory=dict, description="Delivery-model setup snapshot."
+    )
+    weekly_progress_snapshot: dict[str, Any] = Field(
+        default_factory=dict, description="Weekly progress snapshot."
+    )
+    calculated_metrics_snapshot: dict[str, Any] = Field(
+        default_factory=dict, description="Backend-calculated metrics snapshot."
+    )
+    risks: list[RiskInputDTO] = Field(
+        default_factory=list, description="Risk/dependency rows restored into the UI."
     )
 
 
