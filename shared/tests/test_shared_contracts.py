@@ -12,6 +12,10 @@ from wsr_shared import (
     ReadyToShareMetricSummaryDTO,
     ReadyToShareReportMetadataDTO,
     ReadyToShareWsrContentSectionsDTO,
+    WsrApprovalDecision,
+    WsrApprovalRequestDTO,
+    WsrApprovalResponseDTO,
+    WsrLifecycleStatus,
     WsrReviewDecision,
     WsrReviewRequestDTO,
     WsrReviewResponseDTO,
@@ -125,3 +129,25 @@ def test_wsr_review_response_serializes_uuid_aliases() -> None:
 
     assert payload["wsrId"] == "11111111-1111-1111-1111-111111111111"
     assert payload["contentVersionId"] == "22222222-2222-2222-2222-222222222222"
+
+
+def test_wsr_approval_contract_serializes_uuid_aliases() -> None:
+    request = WsrApprovalRequestDTO(
+        content_version_id=UUID("22222222-2222-2222-2222-222222222222"),
+        decision=WsrApprovalDecision.APPROVE,
+        approval_note="Approved for customer sharing.",
+    )
+    response = WsrApprovalResponseDTO(
+        wsr_id=UUID("11111111-1111-1111-1111-111111111111"),
+        content_version_id=UUID("22222222-2222-2222-2222-222222222222"),
+        approval_event_id=UUID("33333333-3333-3333-3333-333333333333"),
+        lifecycle_status=WsrLifecycleStatus.APPROVED,
+        content_version_status=WsrLifecycleStatus.APPROVED,
+    )
+
+    request_payload = request.model_dump(mode="json", by_alias=True)
+    response_payload = response.model_dump(mode="json", by_alias=True)
+
+    assert request_payload["contentVersionId"] == "22222222-2222-2222-2222-222222222222"
+    assert request_payload["decision"] == "APPROVE"
+    assert response_payload["approvalEventId"] == "33333333-3333-3333-3333-333333333333"
