@@ -16,6 +16,10 @@ from wsr_shared.dtos import (
     RiskInputDTO,
     SprintSetupDTO,
     SprintWeeklyProgressDTO,
+    WsrDraftResponseDTO,
+    WsrDraftSaveRequestDTO,
+    WsrDraftValidationResponseDTO,
+    WsrPrefillResponseDTO,
     WsrReviewRequestDTO,
     WsrReviewResponseDTO,
 )
@@ -27,6 +31,8 @@ from wsr_shared.enums import (
     RagStatus,
     RiskSeverity,
     RiskStatus,
+    WsrGenerationStatus,
+    WsrLifecycleStatus,
     WsrReviewDecision,
 )
 
@@ -53,6 +59,12 @@ __all__ = [
     "RiskStatus",
     "SprintSetupDTO",
     "SprintWeeklyProgressDTO",
+    "WsrDraftResponseDTO",
+    "WsrDraftSaveRequestDTO",
+    "WsrDraftValidationResponseDTO",
+    "WsrGenerationStatus",
+    "WsrLifecycleStatus",
+    "WsrPrefillResponseDTO",
     "WsrReviewDecision",
     "WsrReviewRequestDTO",
     "WsrReviewResponseDTO",

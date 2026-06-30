@@ -90,9 +90,17 @@ def sprint_payload(
                 "closureRemark": None,
             }
         ],
-        overview="Sprint draft overview",
-        key_achievements="Authentication module completed",
-        next_week_focus="Integration validation",
+        overview="Sprint delivery overview for the customer-ready weekly status report.",
+        key_achievements=(
+            "- Authentication module completed\n"
+            "- API integration baseline established\n"
+            "- Sprint dependency mitigation confirmed"
+        ),
+        next_week_focus=(
+            "- Complete integration validation; Owner: Priya; Target: Tuesday\n"
+            "- Review dashboard API contract; Owner: Arjun; Target: Wednesday\n"
+            "- Prepare sprint closure note; Owner: Neha; Target: Friday"
+        ),
         remarks="Customer-safe PM remark",
     )
 
@@ -107,7 +115,9 @@ def test_save_wsr_draft_persists_full_state_and_calculated_metrics() -> None:
 
     assert response.generation_status == "NOT_STARTED"
     assert response.lifecycle_status == "DRAFT"
-    assert response.entered_data_snapshot["overview"] == "Sprint draft overview"
+    assert response.entered_data_snapshot["overview"] == (
+        "Sprint delivery overview for the customer-ready weekly status report."
+    )
     assert response.model_setup_snapshot["plannedStoryPoints"] == 70
     assert response.weekly_progress_snapshot["storyPointsCompleted"] == 48
     assert response.calculated_metrics_snapshot == {
@@ -217,4 +227,5 @@ def test_wsr_draft_routes_are_registered() -> None:
     assert "/api/v1/wsr-drafts" in registered_paths
     assert "/api/v1/wsr-drafts/validate" in registered_paths
     assert "/api/v1/wsr-drafts/carry-forward-risks" in registered_paths
+    assert "/api/v1/wsr-drafts/prefill" in registered_paths
     assert "/api/v1/wsr-drafts/{wsr_id}" in registered_paths
