@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { App } from "./App";
+import { WsrFormShell } from "../features/wsr/components/WsrFormShell";
 
 describe("App", () => {
   it("is defined", () => {
@@ -29,5 +30,15 @@ describe("App", () => {
     expect(markup).toContain('aria-label="Risk 1 description"');
     expect(markup).toContain('aria-label="Risk rows"');
     expect(markup).toContain('aria-label="Weekly status report form"');
+  });
+
+  it("renders PI fields and hides Sprint-only fields when PI is selected", () => {
+    const markup = renderToStaticMarkup(<WsrFormShell initialDeliveryModel="PI" />);
+
+    expect(markup).toContain("PI setup");
+    expect(markup).toContain("PI completion");
+    expect(markup).toContain("Required velocity");
+    expect(markup).not.toContain("Sprint setup");
+    expect(markup).not.toContain("Stories completed");
   });
 });

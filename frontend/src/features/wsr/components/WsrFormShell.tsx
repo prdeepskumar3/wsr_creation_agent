@@ -1,3 +1,6 @@
+import { useMemo, useState } from "react";
+
+import type { DeliveryModel } from "../types/wsr.types";
 import {
   ActionBar,
   FormSection,
@@ -9,7 +12,19 @@ import {
 } from "./FormPrimitives";
 import { RiskGrid } from "./RiskGrid";
 
-export function WsrFormShell() {
+type WsrFormShellProps = {
+  initialDeliveryModel?: DeliveryModel;
+};
+
+const deliveryModelLabels: Record<DeliveryModel, string> = {
+  SPRINT: "Sprint based",
+  PI: "PI based",
+};
+
+export function WsrFormShell({ initialDeliveryModel = "SPRINT" }: WsrFormShellProps) {
+  const [deliveryModel, setDeliveryModel] = useState<DeliveryModel>(initialDeliveryModel);
+  const deliveryMetrics = useMemo(() => calculateModelMetrics(deliveryModel), [deliveryModel]);
+
   return (
     <main className="wsr-page">
       <header className="wsr-header">
@@ -67,7 +82,7 @@ export function WsrFormShell() {
           step={2}
           title="Delivery model"
           subtitle="Model selection controls visible fields and validation"
-          badgeLabel="Sprint based"
+          badgeLabel={deliveryModelLabels[deliveryModel]}
           badgeTone="info"
         >
           <div className="model-row">
@@ -76,37 +91,29 @@ export function WsrFormShell() {
               label="Delivery model"
               options={["Sprint based", "PI based"]}
               required
-              value="Sprint based"
+              value={deliveryModelLabels[deliveryModel]}
+              onChange={(value) => {
+                setDeliveryModel(value === "PI based" ? "PI" : "SPRINT");
+              }}
             />
             <p className="model-row__summary">
-              Sprint-based reporting captures sprint dates, planned scope, completed scope,
-              spillover, effort, and RAG status.
+              {deliveryModel === "SPRINT"
+                ? "Sprint-based reporting captures sprint dates, planned scope, completed scope, spillover, effort, and RAG status."
+                : "PI-based reporting captures PI dates, total scope, delivered scope, current sprint, remaining scope, velocity, and confidence."}
             </p>
           </div>
         </FormSection>
 
-        <FormSection
-          step={3}
-          title="Sprint setup"
-          subtitle="Sprint 14 · Jun 23 - Jul 4"
-          badgeLabel="Prefilled"
-          badgeTone="success"
-        >
-          <div className="field-grid field-grid--five">
-            <TextInputField id="sprint-name" label="Sprint name / number" required value="Sprint 14" />
-            <TextInputField id="start-date" label="Start date" required value="2025-06-23" />
-            <TextInputField id="end-date" label="End date" required value="2025-07-04" />
-            <TextInputField id="planned-stories" label="Planned stories" value="18" />
-            <TextInputField id="planned-points" label="Planned story points" value="70" />
-            <TextInputField id="planned-effort" label="Planned effort (hrs)" value="160" />
-            <TextInputField id="dor" label="DOR %" value="85" />
-          </div>
-        </FormSection>
+        {deliveryModel === "SPRINT" ? <SprintSetupSection /> : <PiSetupSection />}
 
         <FormSection
           step={4}
           title="Delivery progress"
-          subtitle="Current week actuals and customer-safe progress narrative"
+          subtitle={
+            deliveryModel === "SPRINT"
+              ? "Current week actuals and customer-safe progress narrative"
+              : "Current PI progress, scope movement, dependencies, and customer-safe narrative"
+          }
           badgeLabel="RAG: Amber"
           badgeTone="warning"
         >
@@ -118,24 +125,16 @@ export function WsrFormShell() {
             value="Authentication module completed and API integration progressed with controlled mitigation for vendor documentation dependency."
           />
           <div className="metric-grid" aria-label="Calculated delivery metrics">
-            <MetricCard label="Story completion" value="67%" caption="12 of 18 planned stories" />
-            <MetricCard label="Story points" value="48 / 70" caption="22 points remaining" />
-            <MetricCard label="Effort usage" value="60%" caption="96 of 160 hours burned" />
-            <MetricCard label="DOR adherence" value="85%" caption="Healthy readiness" />
+            {deliveryMetrics.map((metric) => (
+              <MetricCard
+                key={metric.label}
+                label={metric.label}
+                value={metric.value}
+                caption={metric.caption}
+              />
+            ))}
           </div>
-          <div className="field-grid field-grid--five">
-            <TextInputField id="stories-completed" label="Stories completed" value="12" />
-            <TextInputField id="points-completed" label="Story points completed" value="48" />
-            <TextInputField id="effort-burned" label="Effort burned (hrs)" value="96" />
-            <TextInputField id="unplanned-stories" label="Unplanned stories" value="2" />
-            <SelectField
-              id="rag-status"
-              label="Overall RAG status"
-              options={["Green", "Amber", "Red"]}
-              required
-              value="Amber"
-            />
-          </div>
+          {deliveryModel === "SPRINT" ? <SprintProgressFields /> : <PiProgressFields />}
         </FormSection>
 
         <FormSection
@@ -196,4 +195,130 @@ export function WsrFormShell() {
       </form>
     </main>
   );
+}
+
+function SprintSetupSection() {
+  return (
+    <FormSection
+      step={3}
+      title="Sprint setup"
+      subtitle="Sprint 14 · Jun 23 - Jul 4"
+      badgeLabel="Prefilled"
+      badgeTone="success"
+    >
+      <div className="field-grid field-grid--five">
+        <TextInputField id="sprint-name" label="Sprint name / number" required value="Sprint 14" />
+        <TextInputField id="start-date" label="Start date" required value="2025-06-23" />
+        <TextInputField id="end-date" label="End date" required value="2025-07-04" />
+        <TextInputField id="planned-stories" label="Planned stories" value="18" />
+        <TextInputField id="planned-points" label="Planned story points" value="70" />
+        <TextInputField id="planned-effort" label="Planned effort (hrs)" value="160" />
+        <TextInputField id="dor" label="DOR %" value="85" />
+      </div>
+    </FormSection>
+  );
+}
+
+function PiSetupSection() {
+  return (
+    <FormSection
+      step={3}
+      title="PI setup"
+      subtitle="PI 2025 Q3 · Jun 1 - Aug 31"
+      badgeLabel="Prefilled"
+      badgeTone="success"
+    >
+      <div className="field-grid field-grid--five">
+        <TextInputField id="pi-name" label="PI name / number" required value="PI 2025 Q3" />
+        <TextInputField id="pi-start-date" label="PI start date" required value="2025-06-01" />
+        <TextInputField id="pi-end-date" label="PI end date" required value="2025-08-31" />
+        <TextInputField id="total-sprints" label="Total sprints in PI" value="5" />
+        <TextInputField id="current-sprint" label="Current sprint" value="2" />
+        <TextInputField id="pi-planned-points" label="Planned PI story points" value="120" />
+        <TextInputField id="pi-completed-to-date" label="Completed points to date" value="60" />
+      </div>
+    </FormSection>
+  );
+}
+
+function SprintProgressFields() {
+  return (
+    <div className="field-grid field-grid--five">
+      <TextInputField id="stories-completed" label="Stories completed" value="12" />
+      <TextInputField id="points-completed" label="Story points completed" value="48" />
+      <TextInputField id="effort-burned" label="Effort burned (hrs)" value="96" />
+      <TextInputField id="unplanned-stories" label="Unplanned stories" value="2" />
+      <SelectField
+        id="rag-status"
+        label="Overall RAG status"
+        options={["Green", "Amber", "Red"]}
+        required
+        value="Amber"
+      />
+    </div>
+  );
+}
+
+function PiProgressFields() {
+  return (
+    <div className="field-grid field-grid--five">
+      <TextInputField id="pi-current-sprint-progress" label="Current sprint" value="2" />
+      <TextInputField id="points-completed-this-week" label="Points completed this week" value="18" />
+      <TextInputField id="features-completed" label="Features completed this week" value="2" />
+      <TextInputField id="delayed-scope" label="Delayed scope items" value="1" />
+      <TextInputField id="blockers-dependencies" label="Blockers / dependencies" value="1" />
+      <SelectField
+        id="pi-rag-status"
+        label="Overall RAG status"
+        options={["Green", "Amber", "Red"]}
+        required
+        value="Amber"
+      />
+    </div>
+  );
+}
+
+function calculateModelMetrics(deliveryModel: DeliveryModel) {
+  if (deliveryModel === "PI") {
+    const plannedPoints = 120;
+    const priorCompleted = 60;
+    const completedThisWeek = 18;
+    const completedToDate = priorCompleted + completedThisWeek;
+    const remainingPoints = Math.max(plannedPoints - completedToDate, 0);
+    const currentSprint = 2;
+    const totalSprints = 5;
+    const remainingSprints = Math.max(totalSprints - currentSprint, 1);
+    const requiredVelocity = Math.round((remainingPoints / remainingSprints) * 10) / 10;
+    const averageVelocity = Math.round((completedToDate / currentSprint) * 10) / 10;
+
+    return [
+      {
+        label: "PI completion",
+        value: `${Math.round((completedToDate / plannedPoints) * 100)}%`,
+        caption: `${completedToDate} of ${plannedPoints} points completed`,
+      },
+      {
+        label: "Remaining points",
+        value: String(remainingPoints),
+        caption: `${remainingSprints} sprints remaining`,
+      },
+      {
+        label: "Required velocity",
+        value: String(requiredVelocity),
+        caption: "Points per remaining sprint",
+      },
+      {
+        label: "Average velocity",
+        value: String(averageVelocity),
+        caption: "Current PI average velocity",
+      },
+    ];
+  }
+
+  return [
+    { label: "Story completion", value: "67%", caption: "12 of 18 planned stories" },
+    { label: "Story points", value: "48 / 70", caption: "22 points remaining" },
+    { label: "Effort usage", value: "60%", caption: "96 of 160 hours burned" },
+    { label: "DOR adherence", value: "85%", caption: "Healthy readiness" },
+  ];
 }

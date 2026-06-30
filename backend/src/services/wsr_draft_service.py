@@ -15,8 +15,12 @@ from wsr_shared.dtos import (
     WsrDraftValidationResponseDTO,
     WsrPrefillResponseDTO,
 )
-from wsr_shared.enums import DeliveryModel, WsrGenerationStatus, WsrLifecycleStatus
-from wsr_shared.enums import RiskStatus, WsrGenerationStatus, WsrLifecycleStatus
+from wsr_shared.enums import (
+    DeliveryModel,
+    RiskStatus,
+    WsrGenerationStatus,
+    WsrLifecycleStatus,
+)
 
 DRAFT_SCHEMA_VERSION = "wsr-draft.v1"
 CUSTOMER_CONTEXT_KEYS = {

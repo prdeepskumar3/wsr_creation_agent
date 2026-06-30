@@ -31,6 +31,7 @@ type TextInputFieldProps = {
 
 type SelectFieldProps = TextInputFieldProps & {
   options: string[];
+  onChange?: (value: string) => void;
 };
 
 type TextareaFieldProps = TextInputFieldProps & {
@@ -127,7 +128,7 @@ export function TextInputField(props: TextInputFieldProps) {
   );
 }
 
-export function SelectField({ options, ...props }: SelectFieldProps) {
+export function SelectField({ options, onChange, ...props }: SelectFieldProps) {
   const describedBy = describedByFor(props.id, props.hint, props.error);
 
   return (
@@ -135,7 +136,9 @@ export function SelectField({ options, ...props }: SelectFieldProps) {
       <select
         id={props.id}
         className="control"
-        defaultValue={props.value}
+        value={onChange ? props.value : undefined}
+        defaultValue={onChange ? undefined : props.value}
+        onChange={(event) => onChange?.(event.target.value)}
         aria-invalid={Boolean(props.error)}
         aria-describedby={describedBy}
         required={props.required}

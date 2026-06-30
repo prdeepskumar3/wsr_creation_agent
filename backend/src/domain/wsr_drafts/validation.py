@@ -79,8 +79,6 @@ class WsrDraftValidator:
         errors.extend(self._cross_field_errors(payload, combined_payload, calculated_metrics))
         errors.extend(self._rag_conflict_errors(payload, combined_payload, calculated_metrics))
         errors.extend(self._narrative_errors(payload))
-        errors.extend(self._risk_row_errors(payload.risks, existing_active_risks or []))
-        return DraftValidationResult(calculated_metrics=calculated_metrics, errors=errors)
         errors.extend(self._risk_row_errors(payload.risks, project_risks))
         warnings = self._risk_row_warnings(payload.risks)
         return DraftValidationResult(
