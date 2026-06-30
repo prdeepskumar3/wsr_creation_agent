@@ -39,6 +39,7 @@ class WsrLifecycleStatus(StrEnum):
     GENERATED = "GENERATED"
     REVIEWED = "REVIEWED"
     APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
     EXPORTED = "EXPORTED"
 
 
@@ -91,6 +92,8 @@ class WsrApprovalDecision(StrEnum):
     """Formal decision captured for customer-facing WSR approval events."""
 
     APPROVE = "APPROVE"
+    APPROVE_WITH_EDITS = "APPROVE_WITH_EDITS"
+    REJECT = "REJECT"
 
 
 class WsrExportStatus(StrEnum):

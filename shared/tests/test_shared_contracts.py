@@ -15,6 +15,8 @@ from wsr_shared import (
     WsrApprovalDecision,
     WsrApprovalRequestDTO,
     WsrApprovalResponseDTO,
+    WsrDashboardItemDTO,
+    WsrDashboardResponseDTO,
     WsrExportRequestDTO,
     WsrExportResponseDTO,
     WsrExportStatus,
@@ -138,6 +140,7 @@ def test_wsr_approval_contract_serializes_uuid_aliases() -> None:
     request = WsrApprovalRequestDTO(
         content_version_id=UUID("22222222-2222-2222-2222-222222222222"),
         decision=WsrApprovalDecision.APPROVE,
+        confirm_approval=True,
         approval_note="Approved for customer sharing.",
     )
     response = WsrApprovalResponseDTO(
@@ -175,3 +178,33 @@ def test_wsr_export_contract_serializes_status_metadata() -> None:
     assert request_payload["contentVersionId"] == "22222222-2222-2222-2222-222222222222"
     assert response_payload["exportAttemptId"] == "44444444-4444-4444-4444-444444444444"
     assert response_payload["status"] == "QUEUED"
+
+
+def test_wsr_dashboard_contract_serializes_project_health() -> None:
+    dashboard = WsrDashboardResponseDTO(
+        items=[
+            WsrDashboardItemDTO(
+                account_id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                account_name="TechCorp Inc.",
+                project_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                project_name="TechCorp Portal Revamp",
+                latest_wsr_id=UUID("11111111-1111-1111-1111-111111111111"),
+                reporting_week="2025-06-23",
+                delivery_model=DeliveryModel.SPRINT,
+                lifecycle_status=WsrLifecycleStatus.APPROVED,
+                rag_status=RagStatus.AMBER,
+                open_high_risk_count=1,
+                overdue_risk_count=1,
+                latest_export_status=WsrExportStatus.QUEUED,
+            )
+        ],
+        total_projects=1,
+        projects_with_high_risks=1,
+        pending_approval_count=0,
+    )
+
+    payload = dashboard.model_dump(mode="json", by_alias=True)
+
+    assert payload["totalProjects"] == 1
+    assert payload["items"][0]["projectName"] == "TechCorp Portal Revamp"
+    assert payload["items"][0]["latestExportStatus"] == "QUEUED"

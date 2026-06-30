@@ -7,6 +7,7 @@ from db.base import Base
 from db.models import Account, ExportAttempt, Project, ProjectAssignment, User, WsrContentVersion
 from db.models.wsr_report import WsrReport
 from fastapi.routing import APIRoute
+from services.pptx_export_renderer import render_wsr_pptx
 from services.wsr_export_service import (
     WsrExportService,
     WsrExportStateError,
@@ -105,7 +106,7 @@ def export_request(content_version_id: UUID) -> WsrExportRequestDTO:
     return WsrExportRequestDTO(content_version_id=content_version_id)
 
 
-def test_export_approved_wsr_creates_queued_export_attempt() -> None:
+def test_export_approved_wsr_creates_successful_export_attempt() -> None:
     session_factory = create_test_session_factory()
     with session_factory() as session:
         account_id, project_id, prepared_by = seed_authorized_project(session)
@@ -123,11 +124,11 @@ def test_export_approved_wsr_creates_queued_export_attempt() -> None:
         )
         export_attempts = session.scalars(select(ExportAttempt)).all()
 
-    assert response.status == WsrExportStatus.QUEUED
+    assert response.status == WsrExportStatus.SUCCEEDED
     assert response.export_attempt_id == export_attempts[0].id
     assert response.content_version_id == content_version.id
     assert response.object_key is not None
-    assert export_attempts[0].status == WsrExportStatus.QUEUED.value
+    assert export_attempts[0].status == WsrExportStatus.SUCCEEDED.value
     assert export_attempts[0].requested_by == prepared_by
 
 
@@ -173,6 +174,18 @@ def test_export_excludes_pm_only_content_sections() -> None:
         "executiveSummary": "Customer-ready approved summary.",
         "deliveryProgress": "Approved delivery progress.",
     }
+
+
+def test_export_renderer_creates_pptx_package_from_customer_safe_sections() -> None:
+    pptx_bytes = render_wsr_pptx(
+        {
+            "executiveSummary": "Customer-ready approved summary.",
+            "pmQualityInsights": "This should not be passed into renderer.",
+        }
+    )
+
+    assert pptx_bytes.startswith(b"PK")
+    assert b"ppt/presentation.xml" in pptx_bytes
 
 
 def test_wsr_export_route_is_registered() -> None:
