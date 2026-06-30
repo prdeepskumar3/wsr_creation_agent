@@ -1,38 +1,57 @@
+"""Application service for saving, restoring, and validating WSR drafts."""
+
 from typing import Any
 from uuid import UUID
 
 from db.models import WsrReport, WsrRisk
 from domain.wsr_drafts import DraftMetricCalculator
+from domain.wsr_drafts.validation import WsrDraftValidator
 from repositories.wsr_draft_repository import WsrDraftRepository
 from sqlalchemy.orm import Session
-from wsr_shared.dtos import RiskInputDTO, WsrDraftResponseDTO, WsrDraftSaveRequestDTO
+from wsr_shared.dtos import (
+    RiskInputDTO,
+    WsrDraftResponseDTO,
+    WsrDraftSaveRequestDTO,
+    WsrDraftValidationResponseDTO,
+)
 from wsr_shared.enums import WsrGenerationStatus, WsrLifecycleStatus
 
 DRAFT_SCHEMA_VERSION = "wsr-draft.v1"
 
 
 class DraftAuthorizationError(Exception):
-    """Raised when a user cannot save a draft for the requested project."""
+    """Raised when the requester is not assigned to the target account/project."""
 
 
 class DraftNotFoundError(Exception):
-    """Raised when a requested WSR draft does not exist."""
+    """Raised when a draft lookup does not find an editable draft report."""
 
 
 class WsrDraftService:
-    """Coordinates WSR draft validation, calculation, and persistence."""
+    """Coordinates draft workflows across repository, calculator, and validator.
+
+    The service owns transaction-level behavior for draft persistence. It keeps AI
+    generation out of save operations so PMs can safely save work in progress.
+    """
 
     def __init__(
         self,
         session: Session,
         calculator: DraftMetricCalculator | None = None,
     ) -> None:
+        """Create a service bound to one SQLAlchemy session."""
         self._session = session
         self._repository = WsrDraftRepository(session)
         self._calculator = calculator or DraftMetricCalculator()
+        self._validator = WsrDraftValidator(metric_calculator=self._calculator)
 
     def save_draft(self, payload: WsrDraftSaveRequestDTO) -> WsrDraftResponseDTO:
-        """Create or update a weekly WSR draft without starting AI generation."""
+        """Create or update the current draft for one account/project/reporting week.
+
+        The method recalculates metrics before persistence, replaces risk rows with the
+        latest form state, commits the transaction, and leaves generation status as
+        `NOT_STARTED`.
+        """
         if not self._repository.has_project_access(
             payload.account_id,
             payload.project_id,
@@ -80,7 +99,7 @@ class WsrDraftService:
         return self._to_response(draft)
 
     def get_draft(self, wsr_id: UUID, requested_by: UUID) -> WsrDraftResponseDTO:
-        """Return the saved WSR draft state for UI restoration."""
+        """Return a draft for UI restoration after checking project assignment."""
         draft = self._repository.get_draft(wsr_id)
         if draft is None:
             raise DraftNotFoundError("WSR draft was not found.")
@@ -92,7 +111,17 @@ class WsrDraftService:
             raise DraftAuthorizationError("User is not authorized for this account/project.")
         return self._to_response(draft)
 
+    def validate_draft(self, payload: WsrDraftSaveRequestDTO) -> WsrDraftValidationResponseDTO:
+        """Validate draft data without writing to the database."""
+        result = self._validator.validate(payload)
+        return WsrDraftValidationResponseDTO(
+            is_valid=result.is_valid,
+            calculated_metrics=result.calculated_metrics,
+            errors=result.errors,
+        )
+
     def _build_entered_snapshot(self, payload: WsrDraftSaveRequestDTO) -> dict[str, Any]:
+        """Build the UI restore snapshot that is not stored in dedicated columns."""
         return {
             "overview": payload.overview,
             "keyAchievements": payload.key_achievements,
@@ -106,6 +135,7 @@ class WsrDraftService:
         payload: WsrDraftSaveRequestDTO,
         draft: WsrReport,
     ) -> list[WsrRisk]:
+        """Convert API risk rows into ORM rows linked to the saved WSR report."""
         return [
             WsrRisk(
                 account_id=payload.account_id,
@@ -123,6 +153,7 @@ class WsrDraftService:
         ]
 
     def _to_response(self, draft: WsrReport) -> WsrDraftResponseDTO:
+        """Convert a report ORM object and its risk rows into the public API DTO."""
         return WsrDraftResponseDTO(
             wsr_id=draft.id,
             account_id=draft.account_id,
@@ -142,6 +173,7 @@ class WsrDraftService:
         )
 
     def _to_risk_dto(self, risk: WsrRisk) -> RiskInputDTO:
+        """Convert a persisted risk row back to the draft risk API shape."""
         return RiskInputDTO(
             description=risk.description,
             severity=risk.severity,
