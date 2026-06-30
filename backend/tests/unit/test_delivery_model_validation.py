@@ -32,6 +32,17 @@ def sprint_validation_payload() -> WsrDraftSaveRequestDTO:
             "nextWeekPlan": "Complete remaining API validation and planned stories.",
             "remarks": "",
         },
+        overview="Portal revamp sprint delivery remains on track with manageable risk.",
+        key_achievements=(
+            "- Completed authentication service baseline\n"
+            "- Validated API integration test interface\n"
+            "- Resolved sprint planning dependency"
+        ),
+        next_week_focus=(
+            "- Complete vendor API validation; Owner: Priya; Target: Tue\n"
+            "- Finish dashboard contract review; Owner: Arjun; Target: Wed\n"
+            "- Prepare sprint closure notes; Owner: Neha; Target: Fri"
+        ),
     )
 
 
@@ -61,6 +72,17 @@ def pi_validation_payload() -> WsrDraftSaveRequestDTO:
             "nextWeekPlan": "Close dependency and continue planned PI scope.",
             "remarks": "",
         },
+        overview="PI delivery is progressing with controlled dependency management.",
+        key_achievements=(
+            "- Completed authentication feature baseline\n"
+            "- Advanced dashboard API objective\n"
+            "- Reduced integration dependency risk"
+        ),
+        next_week_focus=(
+            "- Close vendor clarification; Owner: Priya; Target: Tue\n"
+            "- Complete PI objective review; Owner: Arjun; Target: Thu\n"
+            "- Confirm dependency burn-down; Owner: Neha; Target: Fri"
+        ),
     )
 
 
@@ -143,3 +165,56 @@ def test_validation_maps_missing_required_fields_to_field_level_errors() -> None
         error.field == "progressUpdate" and error.code == "REQUIRED"
         for error in result.errors
     )
+
+
+def test_validation_requires_project_overview_before_generation() -> None:
+    payload = sprint_validation_payload()
+    payload.overview = " "
+
+    result = WsrDraftValidator().validate(payload)
+
+    assert result.is_valid is False
+    assert any(
+        error.field == "overview" and error.code == "REQUIRED"
+        for error in result.errors
+    )
+
+
+def test_validation_requires_at_least_three_achievements() -> None:
+    payload = sprint_validation_payload()
+    payload.key_achievements = "Completed authentication module\nValidated API interface"
+
+    result = WsrDraftValidator().validate(payload)
+
+    assert result.is_valid is False
+    assert any(
+        error.field == "keyAchievements" and error.code == "MIN_ACHIEVEMENTS_REQUIRED"
+        for error in result.errors
+    )
+
+
+def test_validation_requires_at_least_three_next_week_plan_items() -> None:
+    payload = sprint_validation_payload()
+    payload.next_week_focus = "Complete integration validation; Prepare sprint demo"
+
+    result = WsrDraftValidator().validate(payload)
+
+    assert result.is_valid is False
+    assert any(
+        error.field == "nextWeekFocus"
+        and error.code == "MIN_NEXT_WEEK_PLAN_ITEMS_REQUIRED"
+        for error in result.errors
+    )
+
+
+def test_validation_accepts_plan_items_with_owner_and_target_timing() -> None:
+    payload = sprint_validation_payload()
+    payload.next_week_focus = (
+        "1. Complete integration validation - Owner: Priya - Target: Tuesday\n"
+        "2. Review dashboard API contract - Owner: Arjun - Target: Wednesday\n"
+        "3. Prepare customer status narrative - Owner: Neha - Target: Friday"
+    )
+
+    result = WsrDraftValidator().validate(payload)
+
+    assert result.is_valid is True
