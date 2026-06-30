@@ -129,6 +129,57 @@ def test_duplicate_active_risk_descriptions_are_blocked() -> None:
     assert any(error.code == "DUPLICATE_ACTIVE_RISK" for error in result.errors)
 
 
+def test_duplicate_active_risk_description_is_blocked_for_same_project() -> None:
+    session_factory = create_test_session_factory()
+    with session_factory() as session:
+        account_id, project_id, prepared_by = seed_authorized_project(session)
+        report = create_report(
+            session,
+            account_id,
+            project_id,
+            prepared_by,
+            reporting_week=date(2025, 6, 23),
+        )
+        add_risk(session, report, "Vendor API dependency may delay validation.")
+        session.commit()
+        payload = draft_payload_with_risks(
+            [valid_risk("Vendor API dependency may delay validation.")]
+        )
+        payload.account_id = account_id
+        payload.project_id = project_id
+        payload.prepared_by = prepared_by
+
+        result = WsrDraftService(session).validate_draft(payload)
+
+    assert result.is_valid is False
+    assert any(error.code == "DUPLICATE_ACTIVE_PROJECT_RISK" for error in result.errors)
+
+
+def test_carry_forward_source_risk_is_not_blocked_as_duplicate() -> None:
+    session_factory = create_test_session_factory()
+    with session_factory() as session:
+        account_id, project_id, prepared_by = seed_authorized_project(session)
+        report = create_report(
+            session,
+            account_id,
+            project_id,
+            prepared_by,
+            reporting_week=date(2025, 6, 23),
+        )
+        source_risk = add_risk(session, report, "Vendor API dependency may delay validation.")
+        session.commit()
+        carried_forward_risk = valid_risk("Vendor API dependency may delay validation.")
+        carried_forward_risk.source_risk_id = source_risk.id
+        payload = draft_payload_with_risks([carried_forward_risk])
+        payload.account_id = account_id
+        payload.project_id = project_id
+        payload.prepared_by = prepared_by
+
+        result = WsrDraftService(session).validate_draft(payload)
+
+    assert result.is_valid is True
+
+
 def test_carry_forward_returns_active_risks_from_latest_approved_same_project() -> None:
     session_factory = create_test_session_factory()
     with session_factory() as session:
@@ -205,18 +256,19 @@ def add_risk(
     report: WsrReport,
     description: str,
     status: RiskStatus = RiskStatus.OPEN,
-) -> None:
-    session.add(
-        WsrRisk(
-            account_id=report.account_id,
-            project_id=report.project_id,
-            wsr_report_id=report.id,
-            description=description,
-            severity=RiskSeverity.HIGH.value,
-            status=status.value,
-            owner_contact="Priya Rao",
-            mitigation="Mitigation is tracked inside the WSR.",
-            planned_closure_date=date(2025, 7, 4),
-            closure_remark="Closed in prior report." if status == RiskStatus.CLOSED else None,
-        )
+) -> WsrRisk:
+    risk = WsrRisk(
+        account_id=report.account_id,
+        project_id=report.project_id,
+        wsr_report_id=report.id,
+        description=description,
+        severity=RiskSeverity.HIGH.value,
+        status=status.value,
+        owner_contact="Priya Rao",
+        mitigation="Mitigation is tracked inside the WSR.",
+        planned_closure_date=date(2025, 7, 4),
+        closure_remark="Closed in prior report." if status == RiskStatus.CLOSED else None,
     )
+    session.add(risk)
+    session.flush()
+    return risk
