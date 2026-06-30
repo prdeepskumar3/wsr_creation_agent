@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID
 
 from wsr_shared.dtos import FieldValidationErrorDTO, RiskInputDTO, WsrDraftSaveRequestDTO
 from wsr_shared.enums import DeliveryModel, RagStatus, RiskStatus
@@ -28,6 +29,14 @@ class DraftValidationResult:
         return not self.errors
 
 
+@dataclass(frozen=True)
+class ExistingActiveRisk:
+    """Active project risk already persisted outside the submitted WSR payload."""
+
+    risk_id: UUID
+    description: str
+
+
 class WsrDraftValidator:
     """Validates draft data before the PM starts AI generation.
 
@@ -45,7 +54,11 @@ class WsrDraftValidator:
         self._required_field_validator = required_field_validator or DeliveryModelPayloadValidator()
         self._metric_calculator = metric_calculator or DraftMetricCalculator()
 
-    def validate(self, payload: WsrDraftSaveRequestDTO) -> DraftValidationResult:
+    def validate(
+        self,
+        payload: WsrDraftSaveRequestDTO,
+        existing_active_risks: list[ExistingActiveRisk] | None = None,
+    ) -> DraftValidationResult:
         """Validate one draft payload and return recalculated metrics plus errors."""
         combined_payload = payload.model_setup | payload.weekly_progress
         calculated_metrics = self._metric_calculator.calculate(
@@ -56,7 +69,7 @@ class WsrDraftValidator:
         errors = self._required_field_errors(payload.delivery_model, combined_payload)
         errors.extend(self._cross_field_errors(payload, combined_payload, calculated_metrics))
         errors.extend(self._rag_conflict_errors(payload, combined_payload, calculated_metrics))
-        errors.extend(self._risk_row_errors(payload.risks))
+        errors.extend(self._risk_row_errors(payload.risks, existing_active_risks or []))
         return DraftValidationResult(calculated_metrics=calculated_metrics, errors=errors)
 
     def _required_field_errors(
@@ -178,10 +191,15 @@ class WsrDraftValidator:
             ]
         return []
 
-    def _risk_row_errors(self, risks: list[RiskInputDTO]) -> list[FieldValidationErrorDTO]:
+    def _risk_row_errors(
+        self,
+        risks: list[RiskInputDTO],
+        existing_active_risks: list[ExistingActiveRisk],
+    ) -> list[FieldValidationErrorDTO]:
         """Validate WSR risk rows without treating them as a separate risk tracker."""
         errors: list[FieldValidationErrorDTO] = []
         seen_active_descriptions: set[str] = set()
+        persisted_risks_by_description = self._active_risks_by_description(existing_active_risks)
         for index, risk in enumerate(risks):
             field_prefix = f"risks[{index}]"
             if risk.status in {RiskStatus.OPEN, RiskStatus.IN_PROGRESS}:
@@ -195,6 +213,19 @@ class WsrDraftValidator:
                             "Active risk descriptions must be unique for this WSR.",
                         )
                     )
+                matching_persisted_risk_ids = persisted_risks_by_description.get(
+                    normalized_description,
+                    set(),
+                )
+                is_known_carry_forward = risk.source_risk_id in matching_persisted_risk_ids
+                if matching_persisted_risk_ids and not is_known_carry_forward:
+                    errors.append(
+                        self._error(
+                            f"{field_prefix}.description",
+                            "DUPLICATE_ACTIVE_PROJECT_RISK",
+                            "An active risk with this description already exists for this project.",
+                        )
+                    )
                 seen_active_descriptions.add(normalized_description)
             if risk.status == RiskStatus.CLOSED and not self._has_text(risk.closure_remark):
                 errors.append(
@@ -205,6 +236,17 @@ class WsrDraftValidator:
                     )
                 )
         return errors
+
+    def _active_risks_by_description(
+        self,
+        existing_active_risks: list[ExistingActiveRisk],
+    ) -> dict[str, set[UUID]]:
+        """Group persisted active risks by normalized description for duplicate checks."""
+        risks_by_description: dict[str, set[UUID]] = {}
+        for risk in existing_active_risks:
+            normalized_description = risk.description.strip().casefold()
+            risks_by_description.setdefault(normalized_description, set()).add(risk.risk_id)
+        return risks_by_description
 
     def _active_risk_required_errors(
         self,

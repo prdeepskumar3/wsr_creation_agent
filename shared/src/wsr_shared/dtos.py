@@ -96,6 +96,10 @@ class RiskInputDTO(ApiDTO):
     mitigation: str = Field(..., description="Mitigation or next action for the risk.")
     planned_closure_date: date = Field(..., description="Target closure date for the risk.")
     closure_remark: str | None = Field(None, description="Required when risk status is CLOSED.")
+    source_risk_id: UUID | None = Field(
+        None,
+        description="Existing risk row ID when this risk is carried forward from a prior WSR.",
+    )
 
 
 class SprintSetupDTO(ApiDTO):

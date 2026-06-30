@@ -97,6 +97,22 @@ class WsrDraftRepository:
         )
         return list(self._session.scalars(statement).all())
 
+    def list_active_project_risks(
+        self,
+        account_id: UUID,
+        project_id: UUID,
+        exclude_report_id: UUID | None = None,
+    ) -> list[WsrRisk]:
+        """Return active risks already persisted for duplicate checks."""
+        statement = select(WsrRisk).where(
+            WsrRisk.account_id == account_id,
+            WsrRisk.project_id == project_id,
+            WsrRisk.status.in_([RiskStatus.OPEN.value, RiskStatus.IN_PROGRESS.value]),
+        )
+        if exclude_report_id is not None:
+            statement = statement.where(WsrRisk.wsr_report_id != exclude_report_id)
+        return list(self._session.scalars(statement).all())
+
     def save(self, wsr_report: WsrReport) -> WsrReport:
         """Attach a report to the session and flush UUIDs needed by child rows."""
         self._session.add(wsr_report)
