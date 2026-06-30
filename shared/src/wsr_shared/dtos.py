@@ -13,6 +13,7 @@ from wsr_shared.enums import (
     RagStatus,
     RiskSeverity,
     RiskStatus,
+    WsrApprovalDecision,
     WsrGenerationStatus,
     WsrLifecycleStatus,
     WsrReviewDecision,
@@ -420,3 +421,29 @@ class WsrReviewResponseDTO(ApiDTO):
         ..., description="Generation workflow status after review persistence."
     )
     lifecycle_status: str = Field(..., description="WSR lifecycle status after review persistence.")
+
+
+class WsrApprovalRequestDTO(ApiDTO):
+    """PM request to approve one reviewed customer-facing content version."""
+
+    content_version_id: UUID = Field(
+        ..., description="Reviewed content version selected for formal approval."
+    )
+    decision: WsrApprovalDecision = Field(
+        WsrApprovalDecision.APPROVE, description="Formal approval decision."
+    )
+    approval_note: str | None = Field(
+        None, description="Optional PM note stored on the approval event."
+    )
+
+
+class WsrApprovalResponseDTO(ApiDTO):
+    """Response returned after a reviewed WSR content version is approved."""
+
+    wsr_id: UUID = Field(..., description="Approved WSR report ID.")
+    content_version_id: UUID = Field(..., description="Approved content version ID.")
+    approval_event_id: UUID = Field(..., description="Audit event recording the approval.")
+    lifecycle_status: WsrLifecycleStatus = Field(..., description="WSR lifecycle after approval.")
+    content_version_status: WsrLifecycleStatus = Field(
+        ..., description="Approved content version status."
+    )

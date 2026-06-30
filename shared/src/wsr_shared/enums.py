@@ -85,3 +85,9 @@ class WsrReviewDecision(StrEnum):
 
     SAVE_WSR_PREVIEW = "SAVE_WSR_PREVIEW"
     SUBMIT_FOR_APPROVAL = "SUBMIT_FOR_APPROVAL"
+
+
+class WsrApprovalDecision(StrEnum):
+    """Formal decision captured for customer-facing WSR approval events."""
+
+    APPROVE = "APPROVE"
