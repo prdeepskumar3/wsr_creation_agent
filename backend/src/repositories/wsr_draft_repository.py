@@ -113,6 +113,21 @@ class WsrDraftRepository:
             statement = statement.where(WsrRisk.wsr_report_id != exclude_report_id)
         return list(self._session.scalars(statement).all())
 
+    def list_project_risks_for_validation(
+        self,
+        account_id: UUID,
+        project_id: UUID,
+        exclude_report_id: UUID | None = None,
+    ) -> list[WsrRisk]:
+        """Return project risks needed for duplicate and lifecycle validation."""
+        statement = select(WsrRisk).where(
+            WsrRisk.account_id == account_id,
+            WsrRisk.project_id == project_id,
+        )
+        if exclude_report_id is not None:
+            statement = statement.where(WsrRisk.wsr_report_id != exclude_report_id)
+        return list(self._session.scalars(statement).all())
+
     def save(self, wsr_report: WsrReport) -> WsrReport:
         """Attach a report to the session and flush UUIDs needed by child rows."""
         self._session.add(wsr_report)
