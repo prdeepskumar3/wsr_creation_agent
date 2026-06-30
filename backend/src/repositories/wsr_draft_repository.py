@@ -3,10 +3,18 @@
 from datetime import date
 from uuid import UUID
 
-from db.models import Project, ProjectAssignment, WsrContentVersion, WsrReport, WsrRisk
+from db.models import (
+    Project,
+    ProjectAssignment,
+    WorkflowRun,
+    WsrContentVersion,
+    WsrReport,
+    WsrRisk,
+)
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
-from wsr_shared.enums import RiskStatus, WsrLifecycleStatus
+from sqlalchemy.sql import func
+from wsr_shared.enums import RiskStatus, WsrGenerationStatus, WsrLifecycleStatus
 
 
 class WsrDraftRepository:
@@ -57,6 +65,37 @@ class WsrDraftRepository:
             WsrReport.lifecycle_status == "DRAFT",
         )
         return self._session.scalar(statement)
+
+    def get_report(self, wsr_id: UUID) -> WsrReport | None:
+        """Return a WSR report by id without applying lifecycle restrictions."""
+        return self._session.get(WsrReport, wsr_id)
+
+    def get_waiting_review_workflow_run(self, wsr_report_id: UUID) -> WorkflowRun | None:
+        """Return the latest workflow run waiting for PM WSR preview review."""
+        return self._session.scalar(
+            select(WorkflowRun)
+            .where(
+                WorkflowRun.wsr_report_id == wsr_report_id,
+                WorkflowRun.status == WsrGenerationStatus.WAITING_FOR_PM_WSR_REVIEW.value,
+            )
+            .order_by(WorkflowRun.created_at.desc(), WorkflowRun.id.desc())
+            .limit(1)
+        )
+
+    def next_content_version_number(self, wsr_report_id: UUID) -> int:
+        """Return the next content version number for a WSR report."""
+        current_version = self._session.scalar(
+            select(func.max(WsrContentVersion.version_number)).where(
+                WsrContentVersion.wsr_report_id == wsr_report_id
+            )
+        )
+        return int(current_version or 0) + 1
+
+    def save_content_version(self, content_version: WsrContentVersion) -> WsrContentVersion:
+        """Attach a customer-facing content version and flush its UUID."""
+        self._session.add(content_version)
+        self._session.flush()
+        return content_version
 
     def replace_risks(self, wsr_report: WsrReport, risks: list[WsrRisk]) -> None:
         """Replace draft risk rows so persistence mirrors the latest submitted form."""

@@ -8,6 +8,7 @@ from services.wsr_draft_service import (
     DraftAuthorizationError,
     DraftNotFoundError,
     WsrDraftService,
+    WsrReviewStateError,
 )
 from sqlalchemy.orm import Session
 from wsr_shared.dtos import (
@@ -16,6 +17,8 @@ from wsr_shared.dtos import (
     WsrDraftSaveRequestDTO,
     WsrDraftValidationResponseDTO,
     WsrPrefillResponseDTO,
+    WsrReviewRequestDTO,
+    WsrReviewResponseDTO,
 )
 
 router = APIRouter(prefix="/wsr-drafts", tags=["wsr-drafts"])
@@ -98,5 +101,32 @@ def get_wsr_draft(
     except DraftNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/{wsr_id}/review-preview", response_model=WsrReviewResponseDTO)
+def review_wsr_preview(
+    wsr_id: UUID,
+    requested_by: UUID,
+    payload: WsrReviewRequestDTO,
+    session: Session = DB_SESSION_DEPENDENCY,
+) -> WsrReviewResponseDTO:
+    """Persist PM-edited ready-to-share WSR preview at the HITL checkpoint."""
+    try:
+        return WsrDraftService(session).review_wsr_preview(wsr_id, requested_by, payload)
+    except DraftAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except DraftNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except WsrReviewStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc

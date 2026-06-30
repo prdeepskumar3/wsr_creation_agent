@@ -1,9 +1,10 @@
 """Application service for saving, restoring, and validating WSR drafts."""
 
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from db.models import WsrReport, WsrRisk
+from db.models import WsrContentVersion, WsrReport, WsrRisk
 from domain.wsr_drafts import DraftMetricCalculator
 from domain.wsr_drafts.validation import ExistingProjectRisk, WsrDraftValidator
 from repositories.wsr_draft_repository import WsrDraftRepository
@@ -14,6 +15,8 @@ from wsr_shared.dtos import (
     WsrDraftSaveRequestDTO,
     WsrDraftValidationResponseDTO,
     WsrPrefillResponseDTO,
+    WsrReviewRequestDTO,
+    WsrReviewResponseDTO,
 )
 from wsr_shared.enums import (
     DeliveryModel,
@@ -39,6 +42,10 @@ class DraftAuthorizationError(Exception):
 
 class DraftNotFoundError(Exception):
     """Raised when a draft lookup does not find an editable draft report."""
+
+
+class WsrReviewStateError(Exception):
+    """Raised when PM preview review is attempted outside the HITL checkpoint."""
 
 
 class WsrDraftService:
@@ -172,6 +179,64 @@ class WsrDraftService:
                 for risk in self._repository.list_active_risks_for_report(approved_report.id)
             ],
             read_only_fields=[],
+        )
+
+    def review_wsr_preview(
+        self,
+        wsr_id: UUID,
+        requested_by: UUID,
+        payload: WsrReviewRequestDTO,
+    ) -> WsrReviewResponseDTO:
+        """Persist PM-edited ready-to-share WSR preview before formal approval.
+
+        This method is the human-in-the-loop resume boundary. It only runs while the
+        generation workflow is waiting for PM WSR review, writes a customer-facing
+        content version, and deliberately avoids approval events.
+        """
+        report = self._repository.get_report(wsr_id)
+        if report is None:
+            raise DraftNotFoundError("WSR report was not found.")
+        if not self._repository.has_project_access(
+            report.account_id,
+            report.project_id,
+            requested_by,
+        ):
+            raise DraftAuthorizationError("User is not authorized for this account/project.")
+
+        workflow_run = self._repository.get_waiting_review_workflow_run(wsr_id)
+        if workflow_run is None:
+            raise WsrReviewStateError("Generation is not waiting for PM WSR review.")
+
+        now = datetime.now(UTC)
+        content_version = WsrContentVersion(
+            account_id=report.account_id,
+            project_id=report.project_id,
+            wsr_report_id=report.id,
+            source_ai_draft_id=None,
+            edited_by=requested_by,
+            version_number=self._repository.next_content_version_number(report.id),
+            status=WsrLifecycleStatus.REVIEWED.value,
+            content_sections=payload.content_sections.model_dump(mode="json", by_alias=True),
+            approved_at=None,
+            created_at=now,
+        )
+        self._repository.save_content_version(content_version)
+
+        report.lifecycle_status = WsrLifecycleStatus.REVIEWED.value
+        report.generation_status = WsrGenerationStatus.HUMAN_REVIEWED.value
+        workflow_run.status = WsrGenerationStatus.HUMAN_REVIEWED.value
+        workflow_run.retrieval_metadata = {
+            **workflow_run.retrieval_metadata,
+            "reviewDecision": payload.decision.value,
+            "contentVersionId": str(content_version.id),
+        }
+        self._session.commit()
+
+        return WsrReviewResponseDTO(
+            wsr_id=report.id,
+            content_version_id=content_version.id,
+            generation_status=report.generation_status,
+            lifecycle_status=report.lifecycle_status,
         )
 
     def _build_entered_snapshot(self, payload: WsrDraftSaveRequestDTO) -> dict[str, Any]:
