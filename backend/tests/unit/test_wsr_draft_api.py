@@ -4,13 +4,29 @@ from uuid import UUID, uuid4
 from api.v1.router import api_v1_router
 from app.create_app import create_app
 from db.base import Base
-from db.models import Account, Project, ProjectAssignment, User, WorkflowRun
+from db.models import (
+    Account,
+    ApprovalEvent,
+    Project,
+    ProjectAssignment,
+    User,
+    WorkflowRun,
+    WsrContentVersion,
+    WsrReport,
+)
 from fastapi.routing import APIRoute
-from services.wsr_draft_service import DraftAuthorizationError, WsrDraftService
+from services.wsr_draft_service import DraftAuthorizationError, WsrDraftService, WsrReviewStateError
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
-from wsr_shared.dtos import WsrDraftSaveRequestDTO
+from wsr_shared.dtos import (
+    ReadyToShareMetricSummaryDTO,
+    ReadyToShareReportMetadataDTO,
+    ReadyToShareWsrContentSectionsDTO,
+    WsrDraftSaveRequestDTO,
+    WsrReviewRequestDTO,
+)
+from wsr_shared.enums import RagStatus, WsrGenerationStatus, WsrLifecycleStatus, WsrReviewDecision
 
 
 def collect_api_paths(routes: list[object], prefix: str = "") -> set[str]:
@@ -105,6 +121,72 @@ def sprint_payload(
     )
 
 
+def ready_to_share_review_request() -> WsrReviewRequestDTO:
+    return WsrReviewRequestDTO(
+        content_sections=ReadyToShareWsrContentSectionsDTO(
+            schema_version="1.0.0",
+            report_metadata=ReadyToShareReportMetadataDTO(
+                account_name="TechCorp Inc.",
+                project_name="TechCorp Portal Revamp",
+                reporting_period="Jun 23 - Jun 27, 2025",
+                prepared_by_name="Arjun Kapoor",
+                delivery_model="SPRINT",
+                rag_status=RagStatus.AMBER,
+            ),
+            metric_summary=ReadyToShareMetricSummaryDTO(
+                story_completion_percent=67,
+                story_point_completion_percent=69,
+                effort_usage_percent=60,
+                open_high_risk_count=1,
+            ),
+            executive_summary=(
+                "Authentication module completed while API dependency remains controlled."
+            ),
+            delivery_progress=(
+                "Current sprint progress remains manageable with focused integration validation."
+            ),
+            key_achievements="Completed authentication module and API integration baseline.",
+            risks_and_dependencies_summary=(
+                "API documentation dependency is mitigated through parallel validation."
+            ),
+            next_week_focus_and_actions=(
+                "Complete API validation and review dashboard API contract with stakeholders."
+            ),
+            customer_facing_remarks="Delivery remains under active control.",
+        ),
+        decision=WsrReviewDecision.SAVE_WSR_PREVIEW,
+        review_note="PM edited the customer-facing preview.",
+    )
+
+
+def put_report_in_waiting_review(
+    session: Session,
+    account_id: UUID,
+    project_id: UUID,
+    prepared_by: UUID,
+) -> UUID:
+    response = WsrDraftService(session).save_draft(
+        sprint_payload(account_id, project_id, prepared_by)
+    )
+    report = session.get(WsrReport, response.wsr_id)
+    assert report is not None
+    report.lifecycle_status = WsrLifecycleStatus.GENERATED.value
+    report.generation_status = WsrGenerationStatus.WAITING_FOR_PM_WSR_REVIEW.value
+    workflow_run = WorkflowRun(
+        account_id=account_id,
+        project_id=project_id,
+        wsr_report_id=response.wsr_id,
+        requested_by=prepared_by,
+        status=WsrGenerationStatus.WAITING_FOR_PM_WSR_REVIEW.value,
+        checkpoint_id="checkpoint-1",
+        retrieval_metadata={},
+        workflow_error_summary=[],
+    )
+    session.add(workflow_run)
+    session.commit()
+    return response.wsr_id
+
+
 def test_save_wsr_draft_persists_full_state_and_calculated_metrics() -> None:
     session_factory = create_test_session_factory()
     with session_factory() as session:
@@ -147,6 +229,55 @@ def test_save_wsr_draft_does_not_enqueue_generation() -> None:
         workflow_runs = session.scalars(select(WorkflowRun)).all()
 
     assert workflow_runs == []
+
+
+def test_wsr_preview_review_creates_content_version_without_approval_event() -> None:
+    session_factory = create_test_session_factory()
+    with session_factory() as session:
+        account_id, project_id, prepared_by = seed_authorized_project(session)
+        wsr_id = put_report_in_waiting_review(session, account_id, project_id, prepared_by)
+
+        response = WsrDraftService(session).review_wsr_preview(
+            wsr_id,
+            prepared_by,
+            ready_to_share_review_request(),
+        )
+        content_versions = session.scalars(select(WsrContentVersion)).all()
+        approval_events = session.scalars(select(ApprovalEvent)).all()
+
+    assert response.wsr_id == wsr_id
+    assert response.generation_status == WsrGenerationStatus.HUMAN_REVIEWED.value
+    assert response.lifecycle_status == WsrLifecycleStatus.REVIEWED.value
+    assert len(content_versions) == 1
+    assert content_versions[0].status == WsrLifecycleStatus.REVIEWED.value
+    assert content_versions[0].content_sections["executiveSummary"].startswith(
+        "Authentication module"
+    )
+    assert approval_events == []
+
+
+def test_wsr_preview_review_rejects_completed_workflow() -> None:
+    session_factory = create_test_session_factory()
+    with session_factory() as session:
+        account_id, project_id, prepared_by = seed_authorized_project(session)
+        wsr_id = put_report_in_waiting_review(session, account_id, project_id, prepared_by)
+        workflow_run = session.scalar(
+            select(WorkflowRun).where(WorkflowRun.wsr_report_id == wsr_id)
+        )
+        assert workflow_run is not None
+        workflow_run.status = WsrGenerationStatus.COMPLETED.value
+        session.commit()
+
+        try:
+            WsrDraftService(session).review_wsr_preview(
+                wsr_id,
+                prepared_by,
+                ready_to_share_review_request(),
+            )
+        except WsrReviewStateError as exc:
+            assert str(exc) == "Generation is not waiting for PM WSR review."
+        else:
+            raise AssertionError("Expected WsrReviewStateError.")
 
 
 def test_save_wsr_draft_rejects_unauthorized_project_access() -> None:
@@ -228,4 +359,5 @@ def test_wsr_draft_routes_are_registered() -> None:
     assert "/api/v1/wsr-drafts/validate" in registered_paths
     assert "/api/v1/wsr-drafts/carry-forward-risks" in registered_paths
     assert "/api/v1/wsr-drafts/prefill" in registered_paths
+    assert "/api/v1/wsr-drafts/{wsr_id}/review-preview" in registered_paths
     assert "/api/v1/wsr-drafts/{wsr_id}" in registered_paths
