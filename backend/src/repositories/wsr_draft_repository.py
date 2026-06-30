@@ -3,7 +3,7 @@
 from datetime import date
 from uuid import UUID
 
-from db.models import Project, ProjectAssignment, WsrReport, WsrRisk
+from db.models import Project, ProjectAssignment, WsrContentVersion, WsrReport, WsrRisk
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from wsr_shared.enums import RiskStatus, WsrLifecycleStatus
@@ -74,7 +74,14 @@ class WsrDraftRepository:
 
     def list_carry_forward_risks(self, account_id: UUID, project_id: UUID) -> list[WsrRisk]:
         """Return active risks from the latest approved WSR for the same project."""
-        latest_approved_report = self._session.scalar(
+        latest_approved_report = self.get_latest_approved_report(account_id, project_id)
+        if latest_approved_report is None:
+            return []
+        return self.list_active_risks_for_report(latest_approved_report.id)
+
+    def get_latest_approved_report(self, account_id: UUID, project_id: UUID) -> WsrReport | None:
+        """Return the most recent approved WSR for an account/project pair."""
+        return self._session.scalar(
             select(WsrReport)
             .where(
                 WsrReport.account_id == account_id,
@@ -84,13 +91,25 @@ class WsrDraftRepository:
             .order_by(WsrReport.reporting_week.desc(), WsrReport.created_at.desc())
             .limit(1)
         )
-        if latest_approved_report is None:
-            return []
 
+    def get_approved_content_version(self, wsr_report_id: UUID) -> WsrContentVersion | None:
+        """Return the approved customer-facing content version for one WSR."""
+        return self._session.scalar(
+            select(WsrContentVersion)
+            .where(
+                WsrContentVersion.wsr_report_id == wsr_report_id,
+                WsrContentVersion.status == WsrLifecycleStatus.APPROVED.value,
+            )
+            .order_by(WsrContentVersion.version_number.desc(), WsrContentVersion.created_at.desc())
+            .limit(1)
+        )
+
+    def list_active_risks_for_report(self, wsr_report_id: UUID) -> list[WsrRisk]:
+        """Return active risk rows for one WSR report."""
         statement = (
             select(WsrRisk)
             .where(
-                WsrRisk.wsr_report_id == latest_approved_report.id,
+                WsrRisk.wsr_report_id == wsr_report_id,
                 WsrRisk.status.in_([RiskStatus.OPEN.value, RiskStatus.IN_PROGRESS.value]),
             )
             .order_by(WsrRisk.created_at, WsrRisk.id)
