@@ -294,6 +294,17 @@ class WsrDraftValidationResponseDTO(ApiDTO):
     )
 
 
+class WsrGenerationStartResponseDTO(ApiDTO):
+    """Response returned after a WSR generation workflow starts."""
+
+    wsr_id: UUID = Field(..., description="WSR report selected for AI generation.")
+    workflow_run_id: UUID = Field(..., description="Workflow run created for LangGraph.")
+    generation_status: WsrGenerationStatus = Field(
+        ..., description="Persisted generation status after workflow start or execution."
+    )
+    correlation_id: str = Field(..., description="Correlation ID propagated into graph metadata.")
+
+
 class WsrPrefillResponseDTO(ApiDTO):
     """Reusable WSR data copied from the latest approved report."""
 
@@ -427,14 +438,23 @@ class WsrReviewResponseDTO(ApiDTO):
 class WsrApprovalRequestDTO(ApiDTO):
     """PM request to approve one reviewed customer-facing content version."""
 
-    content_version_id: UUID = Field(
+    content_version_id: UUID | None = Field(
         ..., description="Reviewed content version selected for formal approval."
     )
     decision: WsrApprovalDecision = Field(
         WsrApprovalDecision.APPROVE, description="Formal approval decision."
     )
+    confirm_approval: bool = Field(
+        False, description="Explicit PM confirmation required for approval decisions."
+    )
+    content_sections: ReadyToShareWsrContentSectionsDTO | None = Field(
+        None, description="Final edited customer-facing content for approve-with-edits."
+    )
     approval_note: str | None = Field(
         None, description="Optional PM note stored on the approval event."
+    )
+    rejection_reason: str | None = Field(
+        None, description="Required PM feedback when rejecting a WSR."
     )
 
 
@@ -448,6 +468,40 @@ class WsrApprovalResponseDTO(ApiDTO):
     content_version_status: WsrLifecycleStatus = Field(
         ..., description="Approved content version status."
     )
+
+
+class WsrDashboardItemDTO(ApiDTO):
+    """One authorized project row in the executive WSR dashboard."""
+
+    account_id: UUID = Field(..., description="Account boundary for the dashboard row.")
+    account_name: str = Field(..., description="Account display name.")
+    project_id: UUID = Field(..., description="Project ID for the dashboard row.")
+    project_name: str = Field(..., description="Project display name.")
+    latest_wsr_id: UUID | None = Field(None, description="Latest approved WSR when available.")
+    reporting_week: date | None = Field(None, description="Latest approved reporting week.")
+    delivery_model: DeliveryModel | None = Field(
+        None, description="Latest approved delivery model."
+    )
+    lifecycle_status: WsrLifecycleStatus | None = Field(
+        None, description="Latest WSR lifecycle status."
+    )
+    rag_status: RagStatus | None = Field(None, description="Customer-facing RAG status.")
+    open_high_risk_count: int = Field(..., ge=0, description="Open high-severity risk count.")
+    overdue_risk_count: int = Field(..., ge=0, description="Open overdue risk count.")
+    latest_export_status: WsrExportStatus | None = Field(None, description="Latest export status.")
+
+
+class WsrDashboardResponseDTO(ApiDTO):
+    """Executive dashboard summary across authorized projects."""
+
+    items: list[WsrDashboardItemDTO] = Field(
+        default_factory=list, description="Authorized project health rows."
+    )
+    total_projects: int = Field(..., ge=0, description="Count of authorized projects returned.")
+    projects_with_high_risks: int = Field(
+        ..., ge=0, description="Projects with at least one open high risk."
+    )
+    pending_approval_count: int = Field(..., ge=0, description="Reviewed WSRs awaiting approval.")
 
 
 class WsrExportRequestDTO(ApiDTO):

@@ -97,6 +97,12 @@ class WsrDraftRepository:
         self._session.flush()
         return content_version
 
+    def save_workflow_run(self, workflow_run: WorkflowRun) -> WorkflowRun:
+        """Attach a workflow run and flush its UUID for generation responses."""
+        self._session.add(workflow_run)
+        self._session.flush()
+        return workflow_run
+
     def replace_risks(self, wsr_report: WsrReport, risks: list[WsrRisk]) -> None:
         """Replace draft risk rows so persistence mirrors the latest submitted form."""
         self._session.execute(delete(WsrRisk).where(WsrRisk.wsr_report_id == wsr_report.id))

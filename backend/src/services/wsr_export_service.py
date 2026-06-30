@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from wsr_shared.dtos import WsrExportRequestDTO, WsrExportResponseDTO
 from wsr_shared.enums import WsrExportStatus, WsrLifecycleStatus
 
+from services.pptx_export_renderer import PptxRenderError, render_wsr_pptx
+
 CUSTOMER_EXPORT_SECTION_KEYS = {
     "schemaVersion",
     "reportMetadata",
@@ -75,6 +77,14 @@ class WsrExportService:
             f"exports/{report.account_id}/{report.project_id}/{report.id}/"
             f"content-version-{content_version.version_number}.pptx"
         )
+        try:
+            render_wsr_pptx(safe_sections)
+            export_status = WsrExportStatus.SUCCEEDED
+            error_code = None
+        except PptxRenderError:
+            export_status = WsrExportStatus.FAILED
+            error_code = "PPTX_RENDER_FAILED"
+
         export_attempt = self._repository.save_export_attempt(
             ExportAttempt(
                 account_id=report.account_id,
@@ -82,13 +92,12 @@ class WsrExportService:
                 wsr_report_id=report.id,
                 content_version_id=content_version.id,
                 requested_by=requested_by,
-                status=WsrExportStatus.QUEUED.value,
+                status=export_status.value,
                 object_key=object_key,
-                error_code=None,
+                error_code=error_code,
                 created_at=datetime.now(UTC),
             )
         )
-        export_attempt.object_key = object_key if safe_sections else object_key
         self._session.commit()
 
         return WsrExportResponseDTO(

@@ -6,8 +6,9 @@ def test_agent_graph_module_imports() -> None:
     assert graph_name() == "weekly_status_report_generation"
 
 
-def test_provider_policy_defaults_to_stub() -> None:
+def test_provider_policy_defaults_to_grok_with_deepseek_fallback() -> None:
     policy = ProviderPolicy()
 
-    assert policy.requires_real_credentials is False
-
+    assert policy.primary_provider == "grok"
+    assert policy.fallback_provider == "deepseek"
+    assert policy.requires_real_credentials is True

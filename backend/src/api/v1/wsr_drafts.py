@@ -8,6 +8,7 @@ from services.wsr_draft_service import (
     DraftAuthorizationError,
     DraftNotFoundError,
     WsrDraftService,
+    WsrGenerationStateError,
     WsrReviewStateError,
 )
 from sqlalchemy.orm import Session
@@ -16,6 +17,7 @@ from wsr_shared.dtos import (
     WsrDraftResponseDTO,
     WsrDraftSaveRequestDTO,
     WsrDraftValidationResponseDTO,
+    WsrGenerationStartResponseDTO,
     WsrPrefillResponseDTO,
     WsrReviewRequestDTO,
     WsrReviewResponseDTO,
@@ -101,6 +103,32 @@ def get_wsr_draft(
     except DraftNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/{wsr_id}/generate", response_model=WsrGenerationStartResponseDTO)
+def start_wsr_generation(
+    wsr_id: UUID,
+    requested_by: UUID,
+    session: Session = DB_SESSION_DEPENDENCY,
+) -> WsrGenerationStartResponseDTO:
+    """Validate a persisted draft and start the LangGraph generation workflow."""
+    try:
+        return WsrDraftService(session).start_generation(wsr_id, requested_by)
+    except DraftAuthorizationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except DraftNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except WsrGenerationStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
 

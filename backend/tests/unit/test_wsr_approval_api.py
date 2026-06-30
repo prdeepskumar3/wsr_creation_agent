@@ -11,9 +11,15 @@ from services.wsr_approval_service import WsrApprovalService, WsrApprovalStateEr
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
-from wsr_shared.dtos import WsrApprovalRequestDTO
+from wsr_shared.dtos import (
+    ReadyToShareMetricSummaryDTO,
+    ReadyToShareReportMetadataDTO,
+    ReadyToShareWsrContentSectionsDTO,
+    WsrApprovalRequestDTO,
+)
 from wsr_shared.enums import (
     DeliveryModel,
+    RagStatus,
     WsrApprovalDecision,
     WsrGenerationStatus,
     WsrLifecycleStatus,
@@ -99,7 +105,34 @@ def approval_request(content_version_id: UUID) -> WsrApprovalRequestDTO:
     return WsrApprovalRequestDTO(
         content_version_id=content_version_id,
         decision=WsrApprovalDecision.APPROVE,
+        confirm_approval=True,
         approval_note="Approved for customer sharing.",
+    )
+
+
+def edited_content() -> ReadyToShareWsrContentSectionsDTO:
+    return ReadyToShareWsrContentSectionsDTO(
+        schema_version="1.0.0",
+        report_metadata=ReadyToShareReportMetadataDTO(
+            account_name="TechCorp Inc.",
+            project_name="TechCorp Portal Revamp",
+            reporting_period="Jun 23 - Jun 27, 2025",
+            prepared_by_name="Project Manager",
+            delivery_model=DeliveryModel.SPRINT,
+            rag_status=RagStatus.AMBER,
+        ),
+        metric_summary=ReadyToShareMetricSummaryDTO(
+            story_completion_percent=67,
+            story_point_completion_percent=68,
+            effort_usage_percent=60,
+            open_high_risk_count=1,
+        ),
+        executive_summary="Final edited executive summary for customer sharing.",
+        delivery_progress="Final edited delivery progress for customer sharing.",
+        key_achievements="Final edited achievement narrative.",
+        risks_and_dependencies_summary="Final edited risk and dependency summary.",
+        next_week_focus_and_actions="Final edited next week focus and action narrative.",
+        customer_facing_remarks="Final edited customer-facing remarks.",
     )
 
 
@@ -127,6 +160,93 @@ def test_approve_reviewed_content_version_creates_approval_event() -> None:
     assert content_version.status == WsrLifecycleStatus.APPROVED.value
     assert content_version.approved_at is not None
     assert report.lifecycle_status == WsrLifecycleStatus.APPROVED.value
+
+
+def test_approval_requires_explicit_confirmation() -> None:
+    session_factory = create_test_session_factory()
+    with session_factory() as session:
+        account_id, project_id, prepared_by = seed_authorized_project(session)
+        report, content_version = create_reviewed_report(
+            session,
+            account_id,
+            project_id,
+            prepared_by,
+        )
+
+        try:
+            WsrApprovalService(session).approve_content_version(
+                report.id,
+                prepared_by,
+                WsrApprovalRequestDTO(
+                    content_version_id=content_version.id,
+                    decision=WsrApprovalDecision.APPROVE,
+                    confirm_approval=False,
+                ),
+            )
+        except WsrApprovalStateError as exc:
+            assert str(exc) == "Approval requires explicit confirmation."
+        else:
+            raise AssertionError("Expected WsrApprovalStateError.")
+
+
+def test_approve_with_edits_creates_new_approved_content_version() -> None:
+    session_factory = create_test_session_factory()
+    with session_factory() as session:
+        account_id, project_id, prepared_by = seed_authorized_project(session)
+        report, content_version = create_reviewed_report(
+            session,
+            account_id,
+            project_id,
+            prepared_by,
+        )
+
+        response = WsrApprovalService(session).approve_content_version(
+            report.id,
+            prepared_by,
+            WsrApprovalRequestDTO(
+                content_version_id=content_version.id,
+                decision=WsrApprovalDecision.APPROVE_WITH_EDITS,
+                confirm_approval=True,
+                content_sections=edited_content(),
+            ),
+        )
+        content_versions = session.scalars(select(WsrContentVersion)).all()
+
+    assert response.content_version_id != content_version.id
+    assert len(content_versions) == 2
+    assert content_versions[1].version_number == 2
+    assert content_versions[1].status == WsrLifecycleStatus.APPROVED.value
+    assert content_versions[1].content_sections["executiveSummary"].startswith("Final edited")
+
+
+def test_reject_reviewed_wsr_requires_and_stores_feedback() -> None:
+    session_factory = create_test_session_factory()
+    with session_factory() as session:
+        account_id, project_id, prepared_by = seed_authorized_project(session)
+        report, content_version = create_reviewed_report(
+            session,
+            account_id,
+            project_id,
+            prepared_by,
+        )
+
+        response = WsrApprovalService(session).approve_content_version(
+            report.id,
+            prepared_by,
+            WsrApprovalRequestDTO(
+                content_version_id=content_version.id,
+                decision=WsrApprovalDecision.REJECT,
+                rejection_reason="Clarify integration dependency before sharing.",
+            ),
+        )
+        approval_event = session.scalar(
+            select(ApprovalEvent).where(ApprovalEvent.content_version_id == content_version.id)
+        )
+
+    assert response.lifecycle_status == WsrLifecycleStatus.REJECTED
+    assert approval_event is not None
+    assert approval_event.decision == WsrApprovalDecision.REJECT.value
+    assert approval_event.reason == "Clarify integration dependency before sharing."
 
 
 def test_approve_rejects_unreviewed_report_state() -> None:

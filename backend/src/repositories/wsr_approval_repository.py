@@ -5,6 +5,7 @@ from uuid import UUID
 from db.models import ApprovalEvent, Project, ProjectAssignment, WsrContentVersion, WsrReport
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 
 
 class WsrApprovalRepository:
@@ -48,3 +49,18 @@ class WsrApprovalRepository:
         self._session.add(approval_event)
         self._session.flush()
         return approval_event
+
+    def next_content_version_number(self, wsr_report_id: UUID) -> int:
+        """Return the next content version number for approve-with-edits."""
+        current_version = self._session.scalar(
+            select(func.max(WsrContentVersion.version_number)).where(
+                WsrContentVersion.wsr_report_id == wsr_report_id
+            )
+        )
+        return int(current_version or 0) + 1
+
+    def save_content_version(self, content_version: WsrContentVersion) -> WsrContentVersion:
+        """Persist a customer-facing content version and flush its UUID."""
+        self._session.add(content_version)
+        self._session.flush()
+        return content_version

@@ -39,6 +39,7 @@ class WsrLifecycleStatus(StrEnum):
     GENERATED = "GENERATED"
     REVIEWED = "REVIEWED"
     APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
     EXPORTED = "EXPORTED"
 
 
@@ -46,6 +47,7 @@ class WsrGenerationStatus(StrEnum):
     """AI generation workflow status for a weekly status report."""
 
     NOT_STARTED = "NOT_STARTED"
+    QUEUED = "QUEUED"
     IN_PROGRESS = "IN_PROGRESS"
     WAITING_FOR_PM_WSR_REVIEW = "WAITING_FOR_PM_WSR_REVIEW"
     HUMAN_REVIEWED = "HUMAN_REVIEWED"
@@ -91,6 +93,8 @@ class WsrApprovalDecision(StrEnum):
     """Formal decision captured for customer-facing WSR approval events."""
 
     APPROVE = "APPROVE"
+    APPROVE_WITH_EDITS = "APPROVE_WITH_EDITS"
+    REJECT = "REJECT"
 
 
 class WsrExportStatus(StrEnum):

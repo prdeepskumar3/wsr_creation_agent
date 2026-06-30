@@ -6,16 +6,24 @@ from app.create_app import create_app
 from db.base import Base
 from db.models import (
     Account,
+    AiDraft,
+    AiInsight,
     ApprovalEvent,
     Project,
     ProjectAssignment,
     User,
+    WorkflowCheckpoint,
     WorkflowRun,
     WsrContentVersion,
     WsrReport,
 )
 from fastapi.routing import APIRoute
-from services.wsr_draft_service import DraftAuthorizationError, WsrDraftService, WsrReviewStateError
+from services.wsr_draft_service import (
+    DraftAuthorizationError,
+    WsrDraftService,
+    WsrGenerationStateError,
+    WsrReviewStateError,
+)
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -231,6 +239,49 @@ def test_save_wsr_draft_does_not_enqueue_generation() -> None:
     assert workflow_runs == []
 
 
+def test_start_generation_creates_workflow_run_for_valid_draft() -> None:
+    session_factory = create_test_session_factory()
+    with session_factory() as session:
+        account_id, project_id, prepared_by = seed_authorized_project(session)
+        draft = WsrDraftService(session).save_draft(
+            sprint_payload(account_id, project_id, prepared_by)
+        )
+
+        response = WsrDraftService(session).start_generation(draft.wsr_id, prepared_by)
+        workflow_runs = session.scalars(select(WorkflowRun)).all()
+        checkpoints = session.scalars(select(WorkflowCheckpoint)).all()
+        ai_drafts = session.scalars(select(AiDraft)).all()
+        ai_insights = session.scalars(select(AiInsight)).all()
+
+    assert response.wsr_id == draft.wsr_id
+    assert response.generation_status == WsrGenerationStatus.WAITING_FOR_PM_WSR_REVIEW
+    assert response.workflow_run_id == workflow_runs[0].id
+    assert workflow_runs[0].status == WsrGenerationStatus.WAITING_FOR_PM_WSR_REVIEW.value
+    assert workflow_runs[0].retrieval_metadata["correlationId"] == response.correlation_id
+    assert workflow_runs[0].retrieval_metadata["retrievedSourceIds"] == []
+    assert workflow_runs[0].checkpoint_id == str(checkpoints[0].id)
+    assert ai_drafts[0].draft_sections["deliveryProgress"] == (
+        "Authentication completed and API integration progressed."
+    )
+    assert ai_insights
+
+
+def test_start_generation_rejects_invalid_persisted_draft() -> None:
+    session_factory = create_test_session_factory()
+    with session_factory() as session:
+        account_id, project_id, prepared_by = seed_authorized_project(session)
+        payload = sprint_payload(account_id, project_id, prepared_by)
+        payload.weekly_progress = {**payload.weekly_progress, "progressUpdate": ""}
+        draft = WsrDraftService(session).save_draft(payload)
+
+        try:
+            WsrDraftService(session).start_generation(draft.wsr_id, prepared_by)
+        except WsrGenerationStateError as exc:
+            assert str(exc) == "WSR draft must pass validation before generation."
+        else:
+            raise AssertionError("Expected WsrGenerationStateError.")
+
+
 def test_wsr_preview_review_creates_content_version_without_approval_event() -> None:
     session_factory = create_test_session_factory()
     with session_factory() as session:
@@ -359,5 +410,6 @@ def test_wsr_draft_routes_are_registered() -> None:
     assert "/api/v1/wsr-drafts/validate" in registered_paths
     assert "/api/v1/wsr-drafts/carry-forward-risks" in registered_paths
     assert "/api/v1/wsr-drafts/prefill" in registered_paths
+    assert "/api/v1/wsr-drafts/{wsr_id}/generate" in registered_paths
     assert "/api/v1/wsr-drafts/{wsr_id}/review-preview" in registered_paths
     assert "/api/v1/wsr-drafts/{wsr_id}" in registered_paths
