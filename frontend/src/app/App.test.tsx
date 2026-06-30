@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { App } from "./App";
 
@@ -6,5 +7,27 @@ describe("App", () => {
   it("is defined", () => {
     expect(App).toBeDefined();
   });
-});
 
+  it("renders the production WSR form shell", () => {
+    const markup = renderToStaticMarkup(<App />);
+
+    expect(markup).toContain("Create weekly status report");
+    expect(markup).toContain("Account and project");
+    expect(markup).toContain("Delivery model");
+    expect(markup).toContain("Sprint setup");
+    expect(markup).toContain("Delivery progress");
+    expect(markup).toContain("Risks and dependencies");
+    expect(markup).toContain("Narrative details");
+    expect(markup).toContain("Save draft");
+    expect(markup).toContain("Generate WSR");
+  });
+
+  it("marks required fields and exposes accessible risk row labels", () => {
+    const markup = renderToStaticMarkup(<App />);
+
+    expect(markup).toContain("Required");
+    expect(markup).toContain('aria-label="Risk 1 description"');
+    expect(markup).toContain('aria-label="Risk rows"');
+    expect(markup).toContain('aria-label="Weekly status report form"');
+  });
+});

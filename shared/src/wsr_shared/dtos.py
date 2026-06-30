@@ -286,6 +286,10 @@ class WsrDraftValidationResponseDTO(ApiDTO):
         default_factory=list,
         description="Field-level validation errors.",
     )
+    warnings: list[FieldValidationErrorDTO] = Field(
+        default_factory=list,
+        description="Non-blocking field-level warnings used for UI highlights.",
+    )
 
 
 class WsrPrefillResponseDTO(ApiDTO):

@@ -1,9 +1,9 @@
 from datetime import date
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from db.base import Base
 from db.models import Account, Project, ProjectAssignment, User, WsrReport, WsrRisk
-from domain.wsr_drafts.validation import WsrDraftValidator
+from domain.wsr_drafts.validation import ExistingProjectRisk, WsrDraftValidator
 from services.wsr_draft_service import WsrDraftService
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -69,6 +69,17 @@ def draft_payload_with_risks(risks: list[RiskInputDTO]) -> WsrDraftSaveRequestDT
             "remarks": "Delivery remains manageable.",
         },
         risks=risks,
+        overview="Portal revamp sprint delivery is controlled with manageable risk.",
+        key_achievements=(
+            "- Completed authentication module\n"
+            "- Created API validation test interface\n"
+            "- Confirmed sprint dependency mitigation"
+        ),
+        next_week_focus=(
+            "- Complete API validation; Owner: Priya; Target: Tuesday\n"
+            "- Review dashboard contract; Owner: Arjun; Target: Wednesday\n"
+            "- Prepare sprint closure update; Owner: Neha; Target: Friday"
+        ),
     )
 
 
@@ -178,6 +189,167 @@ def test_carry_forward_source_risk_is_not_blocked_as_duplicate() -> None:
         result = WsrDraftService(session).validate_draft(payload)
 
     assert result.is_valid is True
+
+
+def test_open_risk_can_move_to_in_progress() -> None:
+    source_risk_id = uuid4()
+    carried_forward_risk = valid_risk("Vendor API dependency may delay validation.")
+    carried_forward_risk.status = RiskStatus.IN_PROGRESS
+    carried_forward_risk.source_risk_id = source_risk_id
+
+    result = WsrDraftValidator().validate(
+        draft_payload_with_risks([carried_forward_risk]),
+        [
+            ExistingProjectRisk(
+                risk_id=source_risk_id,
+                description=carried_forward_risk.description,
+                status=RiskStatus.OPEN,
+                planned_closure_date=date(2025, 7, 4),
+            )
+        ],
+    )
+
+    assert result.is_valid is True
+
+
+def test_open_risk_cannot_close_directly() -> None:
+    source_risk_id = uuid4()
+    carried_forward_risk = valid_risk("Vendor API dependency may delay validation.")
+    carried_forward_risk.status = RiskStatus.CLOSED
+    carried_forward_risk.closure_remark = "Closed after vendor documentation arrived."
+    carried_forward_risk.source_risk_id = source_risk_id
+
+    result = WsrDraftValidator().validate(
+        draft_payload_with_risks([carried_forward_risk]),
+        [
+            ExistingProjectRisk(
+                risk_id=source_risk_id,
+                description=carried_forward_risk.description,
+                status=RiskStatus.OPEN,
+                planned_closure_date=date(2025, 7, 4),
+            )
+        ],
+    )
+
+    assert result.is_valid is False
+    assert any(
+        error.field == "risks[0].status"
+        and error.code == "OPEN_RISK_CANNOT_CLOSE_DIRECTLY"
+        for error in result.errors
+    )
+
+
+def test_in_progress_risk_can_close_with_closure_remark() -> None:
+    source_risk_id = uuid4()
+    carried_forward_risk = valid_risk("Vendor API dependency may delay validation.")
+    carried_forward_risk.status = RiskStatus.CLOSED
+    carried_forward_risk.closure_remark = "Closed after vendor documentation arrived."
+    carried_forward_risk.source_risk_id = source_risk_id
+
+    result = WsrDraftValidator().validate(
+        draft_payload_with_risks([carried_forward_risk]),
+        [
+            ExistingProjectRisk(
+                risk_id=source_risk_id,
+                description=carried_forward_risk.description,
+                status=RiskStatus.IN_PROGRESS,
+                planned_closure_date=date(2025, 7, 4),
+            )
+        ],
+    )
+
+    assert result.is_valid is True
+
+
+def test_closed_risk_cannot_reopen() -> None:
+    source_risk_id = uuid4()
+    reopened_risk = valid_risk("Vendor API dependency may delay validation.")
+    reopened_risk.status = RiskStatus.OPEN
+    reopened_risk.source_risk_id = source_risk_id
+
+    result = WsrDraftValidator().validate(
+        draft_payload_with_risks([reopened_risk]),
+        [
+            ExistingProjectRisk(
+                risk_id=source_risk_id,
+                description=reopened_risk.description,
+                status=RiskStatus.CLOSED,
+                planned_closure_date=date(2025, 7, 4),
+            )
+        ],
+    )
+
+    assert result.is_valid is False
+    assert any(
+        error.field == "risks[0].status" and error.code == "CLOSED_RISK_CANNOT_REOPEN"
+        for error in result.errors
+    )
+
+
+def test_closed_project_risk_cannot_reopen_through_service_validation() -> None:
+    session_factory = create_test_session_factory()
+    with session_factory() as session:
+        account_id, project_id, prepared_by = seed_authorized_project(session)
+        report = create_report(
+            session,
+            account_id,
+            project_id,
+            prepared_by,
+            reporting_week=date(2025, 6, 23),
+        )
+        closed_source_risk = add_risk(
+            session,
+            report,
+            "Vendor API dependency may delay validation.",
+            status=RiskStatus.CLOSED,
+        )
+        session.commit()
+        reopened_risk = valid_risk("Vendor API dependency may delay validation.")
+        reopened_risk.status = RiskStatus.OPEN
+        reopened_risk.source_risk_id = closed_source_risk.id
+        payload = draft_payload_with_risks([reopened_risk])
+        payload.account_id = account_id
+        payload.project_id = project_id
+        payload.prepared_by = prepared_by
+
+        result = WsrDraftService(session).validate_draft(payload)
+
+    assert result.is_valid is False
+    assert any(error.code == "CLOSED_RISK_CANNOT_REOPEN" for error in result.errors)
+
+
+def test_high_active_risk_requires_planned_closure_date() -> None:
+    high_risk = RiskInputDTO.model_construct(
+        description="Vendor API dependency may delay validation.",
+        severity=RiskSeverity.HIGH,
+        status=RiskStatus.OPEN,
+        owner_contact="Priya Rao",
+        mitigation="Parallel validation interface is active.",
+        planned_closure_date=None,
+        closure_remark=None,
+    )
+
+    result = WsrDraftValidator().validate(draft_payload_with_risks([high_risk]))
+
+    assert result.is_valid is False
+    assert any(
+        error.field == "risks[0].plannedClosureDate" and error.code == "REQUIRED"
+        for error in result.errors
+    )
+
+
+def test_overdue_active_risk_returns_warning_without_blocking_generation() -> None:
+    overdue_risk = valid_risk("Vendor API dependency may delay validation.")
+    overdue_risk.planned_closure_date = date(2025, 6, 1)
+
+    result = WsrDraftValidator().validate(draft_payload_with_risks([overdue_risk]))
+
+    assert result.is_valid is True
+    assert any(
+        warning.field == "risks[0].plannedClosureDate"
+        and warning.code == "RISK_OVERDUE"
+        for warning in result.warnings
+    )
 
 
 def test_carry_forward_returns_active_risks_from_latest_approved_same_project() -> None:

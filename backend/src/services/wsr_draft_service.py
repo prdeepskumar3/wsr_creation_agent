@@ -5,7 +5,7 @@ from uuid import UUID
 
 from db.models import WsrReport, WsrRisk
 from domain.wsr_drafts import DraftMetricCalculator
-from domain.wsr_drafts.validation import ExistingActiveRisk, WsrDraftValidator
+from domain.wsr_drafts.validation import ExistingProjectRisk, WsrDraftValidator
 from repositories.wsr_draft_repository import WsrDraftRepository
 from sqlalchemy.orm import Session
 from wsr_shared.dtos import (
@@ -16,6 +16,7 @@ from wsr_shared.dtos import (
     WsrPrefillResponseDTO,
 )
 from wsr_shared.enums import DeliveryModel, WsrGenerationStatus, WsrLifecycleStatus
+from wsr_shared.enums import RiskStatus, WsrGenerationStatus, WsrLifecycleStatus
 
 DRAFT_SCHEMA_VERSION = "wsr-draft.v1"
 CUSTOMER_CONTEXT_KEYS = {
@@ -124,12 +125,13 @@ class WsrDraftService:
         """Validate draft data without writing to the database."""
         result = self._validator.validate(
             payload,
-            self._existing_active_risks_for_validation(payload),
+            self._existing_project_risks_for_validation(payload),
         )
         return WsrDraftValidationResponseDTO(
             is_valid=result.is_valid,
             calculated_metrics=result.calculated_metrics,
             errors=result.errors,
+            warnings=result.warnings,
         )
 
     def user_can_access_project(self, account_id: UUID, project_id: UUID, user_id: UUID) -> bool:
@@ -201,11 +203,11 @@ class WsrDraftService:
             for risk in payload.risks
         ]
 
-    def _existing_active_risks_for_validation(
+    def _existing_project_risks_for_validation(
         self,
         payload: WsrDraftSaveRequestDTO,
-    ) -> list[ExistingActiveRisk]:
-        """Load persisted active risks that can conflict with the submitted draft."""
+    ) -> list[ExistingProjectRisk]:
+        """Load persisted project risks that can conflict with the submitted draft."""
         current_draft = self._repository.find_current_draft(
             payload.account_id,
             payload.project_id,
@@ -213,8 +215,13 @@ class WsrDraftService:
         )
         exclude_report_id = current_draft.id if current_draft is not None else None
         return [
-            ExistingActiveRisk(risk_id=risk.id, description=risk.description)
-            for risk in self._repository.list_active_project_risks(
+            ExistingProjectRisk(
+                risk_id=risk.id,
+                description=risk.description,
+                status=RiskStatus(risk.status),
+                planned_closure_date=risk.planned_closure_date,
+            )
+            for risk in self._repository.list_project_risks_for_validation(
                 payload.account_id,
                 payload.project_id,
                 exclude_report_id,
