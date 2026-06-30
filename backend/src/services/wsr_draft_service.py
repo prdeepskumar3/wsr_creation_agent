@@ -2,18 +2,20 @@
 
 from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from db.models import WsrContentVersion, WsrReport, WsrRisk
+from db.models import WorkflowRun, WsrContentVersion, WsrReport, WsrRisk
 from domain.wsr_drafts import DraftMetricCalculator
 from domain.wsr_drafts.validation import ExistingProjectRisk, WsrDraftValidator
 from repositories.wsr_draft_repository import WsrDraftRepository
 from sqlalchemy.orm import Session
+from workers.jobs.wsr_generation import execute_wsr_generation
 from wsr_shared.dtos import (
     RiskInputDTO,
     WsrDraftResponseDTO,
     WsrDraftSaveRequestDTO,
     WsrDraftValidationResponseDTO,
+    WsrGenerationStartResponseDTO,
     WsrPrefillResponseDTO,
     WsrReviewRequestDTO,
     WsrReviewResponseDTO,
@@ -46,6 +48,10 @@ class DraftNotFoundError(Exception):
 
 class WsrReviewStateError(Exception):
     """Raised when PM preview review is attempted outside the HITL checkpoint."""
+
+
+class WsrGenerationStateError(Exception):
+    """Raised when generation cannot start for the selected WSR."""
 
 
 class WsrDraftService:
@@ -181,6 +187,51 @@ class WsrDraftService:
             read_only_fields=[],
         )
 
+    def start_generation(self, wsr_id: UUID, requested_by: UUID) -> WsrGenerationStartResponseDTO:
+        """Validate a persisted draft and run the LangGraph workflow."""
+        draft = self._repository.get_draft(wsr_id)
+        if draft is None:
+            raise DraftNotFoundError("WSR draft was not found.")
+        if not self._repository.has_project_access(
+            draft.account_id,
+            draft.project_id,
+            requested_by,
+        ):
+            raise DraftAuthorizationError("User is not authorized for this account/project.")
+
+        payload = self._to_save_request(draft, requested_by)
+        validation = self.validate_draft(payload)
+        if not validation.is_valid:
+            raise WsrGenerationStateError("WSR draft must pass validation before generation.")
+
+        correlation_id = f"wsr-{draft.id}-{uuid4()}"
+        workflow_run = self._repository.save_workflow_run(
+            WorkflowRun(
+                account_id=draft.account_id,
+                project_id=draft.project_id,
+                wsr_report_id=draft.id,
+                requested_by=requested_by,
+                status=WsrGenerationStatus.QUEUED.value,
+                checkpoint_id=None,
+                retrieval_metadata={"correlationId": correlation_id},
+                workflow_error_summary=[],
+            )
+        )
+        draft.generation_status = WsrGenerationStatus.QUEUED.value
+        try:
+            execute_wsr_generation(self._session, workflow_run.id)
+        except Exception as exc:
+            self._session.commit()
+            raise WsrGenerationStateError("WSR generation workflow failed to complete.") from exc
+        self._session.commit()
+
+        return WsrGenerationStartResponseDTO(
+            wsr_id=draft.id,
+            workflow_run_id=workflow_run.id,
+            generation_status=WsrGenerationStatus(draft.generation_status),
+            correlation_id=correlation_id,
+        )
+
     def review_wsr_preview(
         self,
         wsr_id: UUID,
@@ -248,6 +299,28 @@ class WsrDraftService:
             "remarks": payload.remarks,
             "risks": [risk.model_dump(mode="json", by_alias=True) for risk in payload.risks],
         }
+
+    def _to_save_request(self, draft: WsrReport, requested_by: UUID) -> WsrDraftSaveRequestDTO:
+        """Rebuild the validation DTO from a persisted draft snapshot."""
+        entered_snapshot = draft.entered_data_snapshot
+        return WsrDraftSaveRequestDTO(
+            account_id=draft.account_id,
+            project_id=draft.project_id,
+            prepared_by=requested_by,
+            reporting_week=draft.reporting_week,
+            delivery_model=DeliveryModel(draft.delivery_model),
+            model_setup=draft.model_setup_snapshot,
+            weekly_progress=draft.weekly_progress_snapshot,
+            risks=[self._to_risk_dto(risk) for risk in self._repository.list_risks(draft.id)],
+            overview=self._string_or_none(entered_snapshot.get("overview")),
+            key_achievements=self._string_or_none(entered_snapshot.get("keyAchievements")),
+            next_week_focus=self._string_or_none(entered_snapshot.get("nextWeekFocus")),
+            remarks=self._string_or_none(entered_snapshot.get("remarks")),
+        )
+
+    def _string_or_none(self, value: object) -> str | None:
+        """Return string values from JSON snapshots without coercing other types."""
+        return value if isinstance(value, str) else None
 
     def _to_risk_models(
         self,
