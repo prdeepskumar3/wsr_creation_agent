@@ -120,6 +120,17 @@ class WsrDraftService:
             errors=result.errors,
         )
 
+    def user_can_access_project(self, account_id: UUID, project_id: UUID, user_id: UUID) -> bool:
+        """Return whether a user can work with WSR data for an account/project."""
+        return bool(self._repository.has_project_access(account_id, project_id, user_id))
+
+    def list_carry_forward_risks(self, account_id: UUID, project_id: UUID) -> list[RiskInputDTO]:
+        """Return active risks from the latest approved WSR for this account/project."""
+        return [
+            self._to_risk_dto(risk)
+            for risk in self._repository.list_carry_forward_risks(account_id, project_id)
+        ]
+
     def _build_entered_snapshot(self, payload: WsrDraftSaveRequestDTO) -> dict[str, Any]:
         """Build the UI restore snapshot that is not stored in dedicated columns."""
         return {

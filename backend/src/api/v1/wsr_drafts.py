@@ -11,6 +11,7 @@ from services.wsr_draft_service import (
 )
 from sqlalchemy.orm import Session
 from wsr_shared.dtos import (
+    RiskInputDTO,
     WsrDraftResponseDTO,
     WsrDraftSaveRequestDTO,
     WsrDraftValidationResponseDTO,
@@ -42,6 +43,24 @@ def validate_wsr_draft(
 ) -> WsrDraftValidationResponseDTO:
     """Return calculated metrics and field-level errors for a draft payload."""
     return WsrDraftService(session).validate_draft(payload)
+
+
+@router.get("/carry-forward-risks", response_model=list[RiskInputDTO])
+def list_carry_forward_risks(
+    account_id: UUID,
+    project_id: UUID,
+    requested_by: UUID,
+    session: Session = DB_SESSION_DEPENDENCY,
+) -> list[RiskInputDTO]:
+    """Return active risks from the latest approved WSR for the same project."""
+    service = WsrDraftService(session)
+    if not service.user_can_access_project(account_id, project_id, requested_by):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not authorized for this account/project.",
+        )
+    risks: list[RiskInputDTO] = service.list_carry_forward_risks(account_id, project_id)
+    return risks
 
 
 @router.get("/{wsr_id}", response_model=WsrDraftResponseDTO)

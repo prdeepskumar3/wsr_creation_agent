@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
-from wsr_shared.dtos import FieldValidationErrorDTO, WsrDraftSaveRequestDTO
-from wsr_shared.enums import DeliveryModel, RagStatus
+from wsr_shared.dtos import FieldValidationErrorDTO, RiskInputDTO, WsrDraftSaveRequestDTO
+from wsr_shared.enums import DeliveryModel, RagStatus, RiskStatus
 
 from domain.delivery_models.validation import DeliveryModelPayloadValidator
 from domain.wsr_drafts.calculations import DraftMetricCalculator
@@ -56,6 +56,7 @@ class WsrDraftValidator:
         errors = self._required_field_errors(payload.delivery_model, combined_payload)
         errors.extend(self._cross_field_errors(payload, combined_payload, calculated_metrics))
         errors.extend(self._rag_conflict_errors(payload, combined_payload, calculated_metrics))
+        errors.extend(self._risk_row_errors(payload.risks))
         return DraftValidationResult(calculated_metrics=calculated_metrics, errors=errors)
 
     def _required_field_errors(
@@ -176,6 +177,56 @@ class WsrDraftValidator:
                 )
             ]
         return []
+
+    def _risk_row_errors(self, risks: list[RiskInputDTO]) -> list[FieldValidationErrorDTO]:
+        """Validate WSR risk rows without treating them as a separate risk tracker."""
+        errors: list[FieldValidationErrorDTO] = []
+        seen_active_descriptions: set[str] = set()
+        for index, risk in enumerate(risks):
+            field_prefix = f"risks[{index}]"
+            if risk.status in {RiskStatus.OPEN, RiskStatus.IN_PROGRESS}:
+                errors.extend(self._active_risk_required_errors(field_prefix, risk))
+                normalized_description = risk.description.strip().casefold()
+                if normalized_description in seen_active_descriptions:
+                    errors.append(
+                        self._error(
+                            f"{field_prefix}.description",
+                            "DUPLICATE_ACTIVE_RISK",
+                            "Active risk descriptions must be unique for this WSR.",
+                        )
+                    )
+                seen_active_descriptions.add(normalized_description)
+            if risk.status == RiskStatus.CLOSED and not self._has_text(risk.closure_remark):
+                errors.append(
+                    self._error(
+                        f"{field_prefix}.closureRemark",
+                        "CLOSURE_REMARK_REQUIRED",
+                        "Closure remark is required when a risk is closed.",
+                    )
+                )
+        return errors
+
+    def _active_risk_required_errors(
+        self,
+        field_prefix: str,
+        risk: RiskInputDTO,
+    ) -> list[FieldValidationErrorDTO]:
+        """Return missing-field errors for risks that are still active."""
+        errors: list[FieldValidationErrorDTO] = []
+        required_text_fields = {
+            "ownerContact": risk.owner_contact,
+            "mitigation": risk.mitigation,
+        }
+        for field_name, value in required_text_fields.items():
+            if not self._has_text(value):
+                errors.append(
+                    self._error(
+                        f"{field_prefix}.{field_name}",
+                        "REQUIRED",
+                        "This field is required for active risks.",
+                    )
+                )
+        return errors
 
     def _expected_rag(
         self,
