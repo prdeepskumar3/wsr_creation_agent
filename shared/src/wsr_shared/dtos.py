@@ -294,6 +294,17 @@ class WsrDraftValidationResponseDTO(ApiDTO):
     )
 
 
+class WsrGenerationStartResponseDTO(ApiDTO):
+    """Response returned after a WSR generation workflow starts."""
+
+    wsr_id: UUID = Field(..., description="WSR report selected for AI generation.")
+    workflow_run_id: UUID = Field(..., description="Workflow run created for LangGraph.")
+    generation_status: WsrGenerationStatus = Field(
+        ..., description="Persisted generation status after workflow start or execution."
+    )
+    correlation_id: str = Field(..., description="Correlation ID propagated into graph metadata.")
+
+
 class WsrPrefillResponseDTO(ApiDTO):
     """Reusable WSR data copied from the latest approved report."""
 
