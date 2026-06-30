@@ -6,6 +6,7 @@ from uuid import UUID
 from db.models import Project, ProjectAssignment, WsrReport, WsrRisk
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
+from wsr_shared.enums import RiskStatus, WsrLifecycleStatus
 
 
 class WsrDraftRepository:
@@ -69,6 +70,47 @@ class WsrDraftRepository:
             WsrRisk.created_at,
             WsrRisk.id,
         )
+        return list(self._session.scalars(statement).all())
+
+    def list_carry_forward_risks(self, account_id: UUID, project_id: UUID) -> list[WsrRisk]:
+        """Return active risks from the latest approved WSR for the same project."""
+        latest_approved_report = self._session.scalar(
+            select(WsrReport)
+            .where(
+                WsrReport.account_id == account_id,
+                WsrReport.project_id == project_id,
+                WsrReport.lifecycle_status == WsrLifecycleStatus.APPROVED.value,
+            )
+            .order_by(WsrReport.reporting_week.desc(), WsrReport.created_at.desc())
+            .limit(1)
+        )
+        if latest_approved_report is None:
+            return []
+
+        statement = (
+            select(WsrRisk)
+            .where(
+                WsrRisk.wsr_report_id == latest_approved_report.id,
+                WsrRisk.status.in_([RiskStatus.OPEN.value, RiskStatus.IN_PROGRESS.value]),
+            )
+            .order_by(WsrRisk.created_at, WsrRisk.id)
+        )
+        return list(self._session.scalars(statement).all())
+
+    def list_active_project_risks(
+        self,
+        account_id: UUID,
+        project_id: UUID,
+        exclude_report_id: UUID | None = None,
+    ) -> list[WsrRisk]:
+        """Return active risks already persisted for duplicate checks."""
+        statement = select(WsrRisk).where(
+            WsrRisk.account_id == account_id,
+            WsrRisk.project_id == project_id,
+            WsrRisk.status.in_([RiskStatus.OPEN.value, RiskStatus.IN_PROGRESS.value]),
+        )
+        if exclude_report_id is not None:
+            statement = statement.where(WsrRisk.wsr_report_id != exclude_report_id)
         return list(self._session.scalars(statement).all())
 
     def save(self, wsr_report: WsrReport) -> WsrReport:

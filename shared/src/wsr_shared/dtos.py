@@ -2,7 +2,7 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from wsr_shared.api import ApiDTO
 from wsr_shared.enums import (
@@ -92,21 +92,14 @@ class RiskInputDTO(ApiDTO):
     )
     severity: RiskSeverity = Field(..., description="Risk severity selected by the PM.")
     status: RiskStatus = Field(..., description="Current risk status within this WSR.")
-    owner_contact: str = Field(
-        ..., min_length=2, description="Owner/contact recorded for accountability."
-    )
-    mitigation: str = Field(
-        ..., min_length=10, description="Mitigation or next action for the risk."
-    )
+    owner_contact: str = Field(..., description="Owner/contact recorded for accountability.")
+    mitigation: str = Field(..., description="Mitigation or next action for the risk.")
     planned_closure_date: date = Field(..., description="Target closure date for the risk.")
     closure_remark: str | None = Field(None, description="Required when risk status is CLOSED.")
-
-    @model_validator(mode="after")
-    def require_closure_remark_for_closed(self) -> "RiskInputDTO":
-        """Require a closure remark when PM marks a risk as closed."""
-        if self.status == RiskStatus.CLOSED and not self.closure_remark:
-            raise ValueError("closureRemark is required when risk status is CLOSED.")
-        return self
+    source_risk_id: UUID | None = Field(
+        None,
+        description="Existing risk row ID when this risk is carried forward from a prior WSR.",
+    )
 
 
 class SprintSetupDTO(ApiDTO):
