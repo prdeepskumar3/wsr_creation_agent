@@ -14,6 +14,7 @@ from wsr_shared.enums import (
     RiskSeverity,
     RiskStatus,
     WsrApprovalDecision,
+    WsrExportStatus,
     WsrGenerationStatus,
     WsrLifecycleStatus,
     WsrReviewDecision,
@@ -447,3 +448,24 @@ class WsrApprovalResponseDTO(ApiDTO):
     content_version_status: WsrLifecycleStatus = Field(
         ..., description="Approved content version status."
     )
+
+
+class WsrExportRequestDTO(ApiDTO):
+    """Request to export an approved customer-facing WSR content version."""
+
+    content_version_id: UUID = Field(
+        ..., description="Approved content version selected for export."
+    )
+
+
+class WsrExportResponseDTO(ApiDTO):
+    """Export attempt metadata returned to the frontend for status polling."""
+
+    export_attempt_id: UUID = Field(..., description="Tracked export attempt ID.")
+    wsr_id: UUID = Field(..., description="WSR report selected for export.")
+    content_version_id: UUID = Field(..., description="Approved content version exported.")
+    status: WsrExportStatus = Field(..., description="Current export attempt status.")
+    object_key: str | None = Field(
+        None, description="Object storage key for the generated PPTX when available."
+    )
+    error_code: str | None = Field(None, description="Controlled export error code.")

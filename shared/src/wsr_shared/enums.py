@@ -91,3 +91,11 @@ class WsrApprovalDecision(StrEnum):
     """Formal decision captured for customer-facing WSR approval events."""
 
     APPROVE = "APPROVE"
+
+
+class WsrExportStatus(StrEnum):
+    """Lifecycle status for a customer-facing WSR export attempt."""
+
+    QUEUED = "QUEUED"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"

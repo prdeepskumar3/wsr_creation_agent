@@ -15,6 +15,9 @@ from wsr_shared import (
     WsrApprovalDecision,
     WsrApprovalRequestDTO,
     WsrApprovalResponseDTO,
+    WsrExportRequestDTO,
+    WsrExportResponseDTO,
+    WsrExportStatus,
     WsrLifecycleStatus,
     WsrReviewDecision,
     WsrReviewRequestDTO,
@@ -151,3 +154,24 @@ def test_wsr_approval_contract_serializes_uuid_aliases() -> None:
     assert request_payload["contentVersionId"] == "22222222-2222-2222-2222-222222222222"
     assert request_payload["decision"] == "APPROVE"
     assert response_payload["approvalEventId"] == "33333333-3333-3333-3333-333333333333"
+
+
+def test_wsr_export_contract_serializes_status_metadata() -> None:
+    request = WsrExportRequestDTO(
+        content_version_id=UUID("22222222-2222-2222-2222-222222222222")
+    )
+    response = WsrExportResponseDTO(
+        export_attempt_id=UUID("44444444-4444-4444-4444-444444444444"),
+        wsr_id=UUID("11111111-1111-1111-1111-111111111111"),
+        content_version_id=UUID("22222222-2222-2222-2222-222222222222"),
+        status=WsrExportStatus.QUEUED,
+        object_key="exports/report.pptx",
+        error_code=None,
+    )
+
+    request_payload = request.model_dump(mode="json", by_alias=True)
+    response_payload = response.model_dump(mode="json", by_alias=True)
+
+    assert request_payload["contentVersionId"] == "22222222-2222-2222-2222-222222222222"
+    assert response_payload["exportAttemptId"] == "44444444-4444-4444-4444-444444444444"
+    assert response_payload["status"] == "QUEUED"
