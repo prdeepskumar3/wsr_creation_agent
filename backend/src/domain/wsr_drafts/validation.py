@@ -1,11 +1,12 @@
 """Validation rules for delivery-model-specific WSR draft data."""
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 from uuid import UUID
 
 from wsr_shared.dtos import FieldValidationErrorDTO, RiskInputDTO, WsrDraftSaveRequestDTO
-from wsr_shared.enums import DeliveryModel, RagStatus, RiskStatus
+from wsr_shared.enums import DeliveryModel, RagStatus, RiskSeverity, RiskStatus
 
 from domain.delivery_models.validation import DeliveryModelPayloadValidator
 from domain.wsr_drafts.calculations import DraftMetricCalculator
@@ -22,6 +23,7 @@ class DraftValidationResult:
 
     calculated_metrics: dict[str, Any]
     errors: list[FieldValidationErrorDTO]
+    warnings: list[FieldValidationErrorDTO]
 
     @property
     def is_valid(self) -> bool:
@@ -30,11 +32,13 @@ class DraftValidationResult:
 
 
 @dataclass(frozen=True)
-class ExistingActiveRisk:
-    """Active project risk already persisted outside the submitted WSR payload."""
+class ExistingProjectRisk:
+    """Project risk already persisted outside the submitted WSR payload."""
 
     risk_id: UUID
     description: str
+    status: RiskStatus
+    planned_closure_date: date | None
 
 
 class WsrDraftValidator:
@@ -57,10 +61,11 @@ class WsrDraftValidator:
     def validate(
         self,
         payload: WsrDraftSaveRequestDTO,
-        existing_active_risks: list[ExistingActiveRisk] | None = None,
+        existing_project_risks: list[ExistingProjectRisk] | None = None,
     ) -> DraftValidationResult:
         """Validate one draft payload and return recalculated metrics plus errors."""
         combined_payload = payload.model_setup | payload.weekly_progress
+        project_risks = existing_project_risks or []
         calculated_metrics = self._metric_calculator.calculate(
             payload.delivery_model,
             payload.model_setup,
@@ -69,8 +74,13 @@ class WsrDraftValidator:
         errors = self._required_field_errors(payload.delivery_model, combined_payload)
         errors.extend(self._cross_field_errors(payload, combined_payload, calculated_metrics))
         errors.extend(self._rag_conflict_errors(payload, combined_payload, calculated_metrics))
-        errors.extend(self._risk_row_errors(payload.risks, existing_active_risks or []))
-        return DraftValidationResult(calculated_metrics=calculated_metrics, errors=errors)
+        errors.extend(self._risk_row_errors(payload.risks, project_risks))
+        warnings = self._risk_row_warnings(payload.risks)
+        return DraftValidationResult(
+            calculated_metrics=calculated_metrics,
+            errors=errors,
+            warnings=warnings,
+        )
 
     def _required_field_errors(
         self,
@@ -194,14 +204,26 @@ class WsrDraftValidator:
     def _risk_row_errors(
         self,
         risks: list[RiskInputDTO],
-        existing_active_risks: list[ExistingActiveRisk],
+        existing_project_risks: list[ExistingProjectRisk],
     ) -> list[FieldValidationErrorDTO]:
         """Validate WSR risk rows without treating them as a separate risk tracker."""
         errors: list[FieldValidationErrorDTO] = []
         seen_active_descriptions: set[str] = set()
-        persisted_risks_by_description = self._active_risks_by_description(existing_active_risks)
+        persisted_risks_by_description = self._active_risks_by_description(
+            existing_project_risks
+        )
+        persisted_risks_by_id = {
+            risk.risk_id: risk
+            for risk in existing_project_risks
+        }
         for index, risk in enumerate(risks):
             field_prefix = f"risks[{index}]"
+            source_risk = (
+                persisted_risks_by_id.get(risk.source_risk_id)
+                if risk.source_risk_id is not None
+                else None
+            )
+            errors.extend(self._risk_transition_errors(field_prefix, risk, source_risk))
             if risk.status in {RiskStatus.OPEN, RiskStatus.IN_PROGRESS}:
                 errors.extend(self._active_risk_required_errors(field_prefix, risk))
                 normalized_description = risk.description.strip().casefold()
@@ -239,14 +261,53 @@ class WsrDraftValidator:
 
     def _active_risks_by_description(
         self,
-        existing_active_risks: list[ExistingActiveRisk],
+        existing_project_risks: list[ExistingProjectRisk],
     ) -> dict[str, set[UUID]]:
         """Group persisted active risks by normalized description for duplicate checks."""
         risks_by_description: dict[str, set[UUID]] = {}
-        for risk in existing_active_risks:
+        for risk in existing_project_risks:
+            if risk.status not in {RiskStatus.OPEN, RiskStatus.IN_PROGRESS}:
+                continue
             normalized_description = risk.description.strip().casefold()
             risks_by_description.setdefault(normalized_description, set()).add(risk.risk_id)
         return risks_by_description
+
+    def _risk_transition_errors(
+        self,
+        field_prefix: str,
+        risk: RiskInputDTO,
+        source_risk: ExistingProjectRisk | None,
+    ) -> list[FieldValidationErrorDTO]:
+        """Return errors for disallowed risk lifecycle transitions."""
+        if source_risk is None:
+            if risk.status == RiskStatus.CLOSED:
+                return [
+                    self._error(
+                        f"{field_prefix}.status",
+                        "NEW_RISK_CANNOT_BE_CLOSED",
+                        "A new risk must be Open or In-Progress before it can be closed.",
+                    )
+                ]
+            return []
+
+        if source_risk.status == RiskStatus.OPEN and risk.status == RiskStatus.CLOSED:
+            return [
+                self._error(
+                    f"{field_prefix}.status",
+                    "OPEN_RISK_CANNOT_CLOSE_DIRECTLY",
+                    "Open risks must move to In-Progress before closure.",
+                )
+            ]
+
+        if source_risk.status == RiskStatus.CLOSED and risk.status != RiskStatus.CLOSED:
+            return [
+                self._error(
+                    f"{field_prefix}.status",
+                    "CLOSED_RISK_CANNOT_REOPEN",
+                    "Closed risks cannot be reopened; create a new linked risk if it recurs.",
+                )
+            ]
+        return []
 
     def _active_risk_required_errors(
         self,
@@ -268,7 +329,34 @@ class WsrDraftValidator:
                         "This field is required for active risks.",
                     )
                 )
+        if risk.severity == RiskSeverity.HIGH and risk.planned_closure_date is None:
+            errors.append(
+                self._error(
+                    f"{field_prefix}.plannedClosureDate",
+                    "REQUIRED",
+                    "High active risks require a planned closure date.",
+                )
+            )
         return errors
+
+    def _risk_row_warnings(self, risks: list[RiskInputDTO]) -> list[FieldValidationErrorDTO]:
+        """Return non-blocking risk warnings that the UI should highlight."""
+        warnings: list[FieldValidationErrorDTO] = []
+        today = date.today()
+        for index, risk in enumerate(risks):
+            if (
+                risk.status in {RiskStatus.OPEN, RiskStatus.IN_PROGRESS}
+                and risk.planned_closure_date is not None
+                and risk.planned_closure_date < today
+            ):
+                warnings.append(
+                    self._error(
+                        f"risks[{index}].plannedClosureDate",
+                        "RISK_OVERDUE",
+                        "This risk is past its planned closure date.",
+                    )
+                )
+        return warnings
 
     def _expected_rag(
         self,
