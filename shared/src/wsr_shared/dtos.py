@@ -288,6 +288,40 @@ class WsrDraftValidationResponseDTO(ApiDTO):
     )
 
 
+class WsrPrefillResponseDTO(ApiDTO):
+    """Reusable WSR data copied from the latest approved report."""
+
+    has_approved_history: bool = Field(
+        ..., description="Whether a prior approved WSR was found for account/project."
+    )
+    source_wsr_id: UUID | None = Field(
+        None, description="Approved WSR used as the prefill source."
+    )
+    delivery_model: DeliveryModel | None = Field(
+        None, description="Delivery model from the source WSR."
+    )
+    model_setup: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Reusable delivery-model setup values.",
+    )
+    previous_customer_context: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Customer-facing context safe to show in the next WSR.",
+    )
+    prior_pi_completed_story_points: int | None = Field(
+        None,
+        description="Prior completed PI points copied for PI-based projects.",
+    )
+    carry_forward_risks: list[RiskInputDTO] = Field(
+        default_factory=list,
+        description="Active risks copied from the latest approved WSR.",
+    )
+    read_only_fields: list[str] = Field(
+        default_factory=list,
+        description="Prefill response fields that should be rendered as read-only context.",
+    )
+
+
 class ReadyToShareReportMetadataDTO(ApiDTO):
     """Header metadata displayed in the customer-ready WSR."""
 

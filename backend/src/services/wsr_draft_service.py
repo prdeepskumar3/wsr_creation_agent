@@ -13,10 +13,19 @@ from wsr_shared.dtos import (
     WsrDraftResponseDTO,
     WsrDraftSaveRequestDTO,
     WsrDraftValidationResponseDTO,
+    WsrPrefillResponseDTO,
 )
-from wsr_shared.enums import WsrGenerationStatus, WsrLifecycleStatus
+from wsr_shared.enums import DeliveryModel, WsrGenerationStatus, WsrLifecycleStatus
 
 DRAFT_SCHEMA_VERSION = "wsr-draft.v1"
+CUSTOMER_CONTEXT_KEYS = {
+    "executiveSummary",
+    "deliveryProgress",
+    "keyAchievements",
+    "risksAndDependenciesSummary",
+    "nextWeekFocusAndActions",
+    "customerFacingRemarks",
+}
 
 
 class DraftAuthorizationError(Exception):
@@ -130,9 +139,34 @@ class WsrDraftService:
     def list_carry_forward_risks(self, account_id: UUID, project_id: UUID) -> list[RiskInputDTO]:
         """Return active risks from the latest approved WSR for this account/project."""
         return [
-            self._to_risk_dto(risk)
+            self._to_carry_forward_risk_dto(risk)
             for risk in self._repository.list_carry_forward_risks(account_id, project_id)
         ]
+
+    def get_prefill(self, account_id: UUID, project_id: UUID) -> WsrPrefillResponseDTO:
+        """Build editable WSR prefill data from the latest approved project report."""
+        approved_report = self._repository.get_latest_approved_report(account_id, project_id)
+        if approved_report is None:
+            return WsrPrefillResponseDTO(has_approved_history=False)
+
+        approved_content = self._repository.get_approved_content_version(approved_report.id)
+        return WsrPrefillResponseDTO(
+            has_approved_history=True,
+            source_wsr_id=approved_report.id,
+            delivery_model=DeliveryModel(approved_report.delivery_model),
+            model_setup=approved_report.model_setup_snapshot,
+            previous_customer_context=self._customer_context_from_content(
+                approved_content.content_sections if approved_content else {}
+            ),
+            prior_pi_completed_story_points=self._prior_pi_completed_story_points(
+                approved_report.calculated_metrics_snapshot
+            ),
+            carry_forward_risks=[
+                self._to_carry_forward_risk_dto(risk)
+                for risk in self._repository.list_active_risks_for_report(approved_report.id)
+            ],
+            read_only_fields=[],
+        )
 
     def _build_entered_snapshot(self, payload: WsrDraftSaveRequestDTO) -> dict[str, Any]:
         """Build the UI restore snapshot that is not stored in dedicated columns."""
@@ -187,6 +221,28 @@ class WsrDraftService:
             )
         ]
 
+    def _customer_context_from_content(
+        self,
+        content_sections: dict[str, object],
+    ) -> dict[str, object]:
+        """Return only customer-facing content safe to reuse in a new WSR."""
+        return {
+            key: value
+            for key, value in content_sections.items()
+            if key in CUSTOMER_CONTEXT_KEYS and value not in (None, "")
+        }
+
+    def _prior_pi_completed_story_points(self, metrics: dict[str, object]) -> int | None:
+        """Extract prior completed PI points when the latest report contains them."""
+        completed_points = metrics.get("completedToDateStoryPoints")
+        if isinstance(completed_points, bool):
+            return None
+        if isinstance(completed_points, int):
+            return completed_points
+        if isinstance(completed_points, float):
+            return int(completed_points)
+        return None
+
     def _to_response(self, draft: WsrReport) -> WsrDraftResponseDTO:
         """Convert a report ORM object and its risk rows into the public API DTO."""
         return WsrDraftResponseDTO(
@@ -219,3 +275,9 @@ class WsrDraftService:
             closure_remark=risk.closure_remark,
             source_risk_id=risk.source_risk_id,
         )
+
+    def _to_carry_forward_risk_dto(self, risk: WsrRisk) -> RiskInputDTO:
+        """Convert an approved active risk into an editable carried-forward row."""
+        risk_dto = self._to_risk_dto(risk)
+        risk_dto.source_risk_id = risk.id
+        return risk_dto

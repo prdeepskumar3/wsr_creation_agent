@@ -217,4 +217,5 @@ def test_wsr_draft_routes_are_registered() -> None:
     assert "/api/v1/wsr-drafts" in registered_paths
     assert "/api/v1/wsr-drafts/validate" in registered_paths
     assert "/api/v1/wsr-drafts/carry-forward-risks" in registered_paths
+    assert "/api/v1/wsr-drafts/prefill" in registered_paths
     assert "/api/v1/wsr-drafts/{wsr_id}" in registered_paths
