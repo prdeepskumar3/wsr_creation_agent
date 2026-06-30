@@ -1,5 +1,6 @@
 """Validation rules for delivery-model-specific WSR draft data."""
 
+import re
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -9,6 +10,9 @@ from wsr_shared.enums import DeliveryModel, RagStatus, RiskStatus
 
 from domain.delivery_models.validation import DeliveryModelPayloadValidator
 from domain.wsr_drafts.calculations import DraftMetricCalculator
+
+MIN_NARRATIVE_ITEMS = 3
+MIN_NARRATIVE_ITEM_LENGTH = 5
 
 
 @dataclass(frozen=True)
@@ -69,6 +73,7 @@ class WsrDraftValidator:
         errors = self._required_field_errors(payload.delivery_model, combined_payload)
         errors.extend(self._cross_field_errors(payload, combined_payload, calculated_metrics))
         errors.extend(self._rag_conflict_errors(payload, combined_payload, calculated_metrics))
+        errors.extend(self._narrative_errors(payload))
         errors.extend(self._risk_row_errors(payload.risks, existing_active_risks or []))
         return DraftValidationResult(calculated_metrics=calculated_metrics, errors=errors)
 
@@ -191,6 +196,39 @@ class WsrDraftValidator:
             ]
         return []
 
+    def _narrative_errors(self, payload: WsrDraftSaveRequestDTO) -> list[FieldValidationErrorDTO]:
+        """Validate customer-facing narrative inputs before AI generation starts."""
+        errors: list[FieldValidationErrorDTO] = []
+        if not self._has_text(payload.overview):
+            errors.append(
+                self._error(
+                    "overview",
+                    "REQUIRED",
+                    "Project overview is required before generation.",
+                )
+            )
+
+        achievements = self._narrative_items(payload.key_achievements)
+        if len(achievements) < MIN_NARRATIVE_ITEMS:
+            errors.append(
+                self._error(
+                    "keyAchievements",
+                    "MIN_ACHIEVEMENTS_REQUIRED",
+                    "Enter at least three key achievements.",
+                )
+            )
+
+        next_week_plan_items = self._narrative_items(payload.next_week_focus)
+        if len(next_week_plan_items) < MIN_NARRATIVE_ITEMS:
+            errors.append(
+                self._error(
+                    "nextWeekFocus",
+                    "MIN_NEXT_WEEK_PLAN_ITEMS_REQUIRED",
+                    "Enter at least three next-week plan items.",
+                )
+            )
+        return errors
+
     def _risk_row_errors(
         self,
         risks: list[RiskInputDTO],
@@ -293,6 +331,21 @@ class WsrDraftValidator:
     def _has_text(self, value: Any) -> bool:
         """Return whether a value contains non-whitespace text."""
         return isinstance(value, str) and bool(value.strip())
+
+    def _narrative_items(self, value: Any) -> list[str]:
+        """Split PM-entered multiline narrative text into meaningful list items."""
+        if not isinstance(value, str):
+            return []
+        item_candidates = re.split(r"[\n;]+", value)
+        return [
+            cleaned_item
+            for item in item_candidates
+            if len(cleaned_item := self._clean_narrative_item(item)) >= MIN_NARRATIVE_ITEM_LENGTH
+        ]
+
+    def _clean_narrative_item(self, value: str) -> str:
+        """Remove common bullet and numbering prefixes from one narrative item."""
+        return re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", value).strip()
 
     def _error(self, field: str, code: str, message: str) -> FieldValidationErrorDTO:
         """Create a field-level validation error DTO with a stable code."""

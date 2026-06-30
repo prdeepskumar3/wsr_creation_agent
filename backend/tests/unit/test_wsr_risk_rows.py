@@ -69,6 +69,17 @@ def draft_payload_with_risks(risks: list[RiskInputDTO]) -> WsrDraftSaveRequestDT
             "remarks": "Delivery remains manageable.",
         },
         risks=risks,
+        overview="Portal revamp sprint delivery is controlled with manageable risk.",
+        key_achievements=(
+            "- Completed authentication module\n"
+            "- Created API validation test interface\n"
+            "- Confirmed sprint dependency mitigation"
+        ),
+        next_week_focus=(
+            "- Complete API validation; Owner: Priya; Target: Tuesday\n"
+            "- Review dashboard contract; Owner: Arjun; Target: Wednesday\n"
+            "- Prepare sprint closure update; Owner: Neha; Target: Friday"
+        ),
     )
 
 
