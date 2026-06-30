@@ -333,6 +333,27 @@ button {
   gap: 8px;
 }
 
+.risk-grid__inline-error {
+  color: var(--wsr-red);
+  font-size: 12px;
+  margin: 6px 0 0;
+}
+
+.risk-grid__remove {
+  background: #ffffff;
+  border: 1px solid var(--wsr-border);
+  border-radius: 7px;
+  color: var(--wsr-text);
+  min-height: 36px;
+  padding: 7px 10px;
+}
+
+.risk-grid__remove:disabled {
+  color: var(--wsr-text-muted);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .action-bar {
   align-items: center;
   background: rgb(255 255 255 / 92%);
