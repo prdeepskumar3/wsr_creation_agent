@@ -181,6 +181,19 @@ export function WsrFormShell({ initialDeliveryModel = "SPRINT" }: WsrFormShellPr
           </div>
         </FormSection>
 
+        <FormSection
+          step={7}
+          title="AI review and ready-to-share preview"
+          subtitle="PM-only guidance stays read-only; customer-facing WSR content remains editable"
+          badgeLabel="Review"
+          badgeTone="info"
+        >
+          <div className="review-workspace">
+            <AiInsightsPanel />
+            <ReadyToSharePreview deliveryModel={deliveryModel} />
+          </div>
+        </FormSection>
+
         <ActionBar>
           <button className="button button--secondary" type="button">
             Save draft
@@ -194,6 +207,105 @@ export function WsrFormShell({ initialDeliveryModel = "SPRINT" }: WsrFormShellPr
         </ActionBar>
       </form>
     </main>
+  );
+}
+
+function AiInsightsPanel() {
+  const insights = [
+    {
+      title: "Status discrepancy",
+      severity: "Amber",
+      message:
+        "Story completion is 67% while the report is Amber. Keep the vendor API dependency visible in the executive summary.",
+    },
+    {
+      title: "Actionability improvement",
+      severity: "Medium",
+      message:
+        "Next week focus names the right work. Add owner and target date for each action before customer sharing.",
+    },
+    {
+      title: "Customer-safe language",
+      severity: "Low",
+      message:
+        "Avoid internal-only phrases such as workaround. Use mitigation, validation path, or parallel execution instead.",
+    },
+  ];
+
+  return (
+    <aside className="ai-insights" aria-labelledby="ai-insights-title">
+      <div className="ai-insights__header">
+        <div>
+          <h3 id="ai-insights-title">AI insights</h3>
+          <p>View-only PM guidance</p>
+        </div>
+        <StatusBadge label="Read only" tone="neutral" />
+      </div>
+      <div className="ai-insights__items">
+        {insights.map((insight, index) => (
+          <details className="ai-insight" key={insight.title} open={index === 0}>
+            <summary>
+              <span>{insight.title}</span>
+              <StatusBadge label={insight.severity} tone={index === 0 ? "warning" : "info"} />
+            </summary>
+            <p>{insight.message}</p>
+          </details>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
+function ReadyToSharePreview({ deliveryModel }: { deliveryModel: DeliveryModel }) {
+  return (
+    <section className="wsr-preview" aria-labelledby="ready-preview-title">
+      <div className="wsr-preview__header">
+        <div>
+          <h3 id="ready-preview-title">Ready-to-share WSR preview</h3>
+          <p>Editable customer-facing content</p>
+        </div>
+        <StatusBadge label={deliveryModelLabels[deliveryModel]} tone="success" />
+      </div>
+      <div className="wsr-preview__meta">
+        <span>TechCorp Portal Revamp</span>
+        <span>Jun 23 - Jun 27, 2025</span>
+        <span>Prepared by Arjun Kapoor</span>
+      </div>
+      <div className="field-grid field-grid--two">
+        <TextareaField
+          id="preview-executive-summary"
+          label="Executive summary"
+          required
+          rows={5}
+          value="Authentication module delivery progressed as planned. API integration remains under active mitigation due to vendor documentation dependency, with Amber status retained for transparent stakeholder visibility."
+        />
+        <TextareaField
+          id="preview-delivery-progress"
+          label="Delivery progress"
+          required
+          rows={5}
+          value={
+            deliveryModel === "SPRINT"
+              ? "The sprint completed 12 of 18 planned stories and 48 of 70 planned story points. Remaining scope is focused on integration validation and dashboard API contract readiness."
+              : "The PI has completed 78 of 120 planned story points. Current velocity supports controlled delivery, with dependency closure required to protect the next sprint objective."
+          }
+        />
+        <TextareaField
+          id="preview-risks"
+          label="Risks and dependencies"
+          required
+          rows={4}
+          value="Vendor API documentation dependency may delay final integration validation. A parallel validation interface is active while vendor clarification is pending."
+        />
+        <TextareaField
+          id="preview-next-actions"
+          label="Next week focus and actions"
+          required
+          rows={4}
+          value="Complete API validation after vendor clarification, review dashboard API contract with stakeholders, and prepare sprint closure summary for the next report."
+        />
+      </div>
+    </section>
   );
 }
 

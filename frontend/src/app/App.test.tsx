@@ -19,6 +19,7 @@ describe("App", () => {
     expect(markup).toContain("Delivery progress");
     expect(markup).toContain("Risks and dependencies");
     expect(markup).toContain("Narrative details");
+    expect(markup).toContain("AI review and ready-to-share preview");
     expect(markup).toContain("Save draft");
     expect(markup).toContain("Generate WSR");
   });
@@ -40,5 +41,18 @@ describe("App", () => {
     expect(markup).toContain("Required velocity");
     expect(markup).not.toContain("Sprint setup");
     expect(markup).not.toContain("Stories completed");
+  });
+
+  it("renders read-only AI insights and editable ready-to-share preview", () => {
+    const markup = renderToStaticMarkup(<App />);
+
+    expect(markup).toContain("AI insights");
+    expect(markup).toContain("View-only PM guidance");
+    expect(markup).toContain("Read only");
+    expect(markup).toContain("<details");
+    expect(markup).toContain("Ready-to-share WSR preview");
+    expect(markup).toContain("Editable customer-facing content");
+    expect(markup).toContain('id="preview-executive-summary"');
+    expect(markup).toContain('id="preview-next-actions"');
   });
 });
